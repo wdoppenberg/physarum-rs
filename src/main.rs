@@ -1,7 +1,19 @@
-use bevy::{prelude::*, render::{render_resource::*, renderer::{RenderDevice, RenderQueue}}};
-use std::borrow::Cow;
 use bevy::render::render_asset::RenderAssetUsages;
-use rand::{random, Rng};
+use bevy::{
+    prelude::*,
+    render::{
+        extract_resource::ExtractResourcePlugin,
+        render_resource::*,
+        renderer::{RenderDevice, RenderQueue},
+    },
+};
+use bevy_render::renderer::RenderAdapter;
+use rand::Rng;
+use std::borrow::Cow;
+use std::fs;
+use std::process::exit;
+use std::thread::sleep;
+use std::time::Duration;
 
 mod points_basematrix;
 use points_basematrix::{NUMBER_OF_BASE_POINTS, PARAMETERS_MATRIX};
@@ -49,7 +61,6 @@ struct PhysarumSimulation {
     point_cursor_index: usize,
 
     // Buffers for GPU data
-    particles_buffer: Buffer,
     simulation_params_buffer: Buffer,
     uniform_buffer: Buffer,
     counter_buffer: Buffer,
@@ -65,11 +76,20 @@ struct PhysarumSimulation {
     display_texture: Texture,
     display_texture_view: TextureView,
 
-    // Compute pipelines for each simulation step
-    setter_pipeline: ComputePipeline,
-    move_pipeline: ComputePipeline,
-    deposit_pipeline: ComputePipeline,
-    diffusion_pipeline: ComputePipeline,
+    // Shader handles for creating pipelines
+    setter_shader: Handle<Shader>,
+    move_shader: Handle<Shader>,
+    deposit_shader: Handle<Shader>,
+    diffusion_shader: Handle<Shader>,
+
+    // Pipeline IDs for retrieving pipelines from the cache
+    setter_pipeline_id: CachedComputePipelineId,
+    move_pipeline_id: CachedComputePipelineId,
+    deposit_pipeline_id: CachedComputePipelineId,
+    diffusion_pipeline_id: CachedComputePipelineId,
+
+    // Bind group layout for compute shaders
+    compute_bind_group_layout: BindGroupLayout,
 
     // Bind groups to link our buffers and textures to the shaders
     compute_bind_group_a: BindGroup,
@@ -85,24 +105,52 @@ struct PhysarumDisplay {
     image_handle: Handle<Image>,
 }
 
+#[derive(Resource, Default)]
+pub struct ComputePipelines {
+    pub move_pipeline: Option<ComputePipeline>,
+    pub deposit_pipeline: Option<ComputePipeline>,
+    pub diffusion_pipeline: Option<ComputePipeline>,
+}
+
+
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
+    // Create the app with default plugins and window configuration
+    let mut app = App::new();
+
+    // Add the default plugins with window configuration
+    app.add_plugins(
+        DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Physarum Simulation".into(),
-                resolution: (simulation_settings::WIDTH as f32, simulation_settings::HEIGHT as f32).into(),
+                resolution: (
+                    simulation_settings::WIDTH as f32,
+                    simulation_settings::HEIGHT as f32,
+                )
+                    .into(),
                 ..default()
             }),
             ..default()
-        }))
-        .add_systems(Startup, setup)
-        .add_systems(Update, handle_input)
-        .add_systems(Update, update_simulation)
-        .run();
+        }),
+    );
+
+    // Add our systems
+    // Use PostStartup instead of Startup to ensure render resources are initialized
+    app.add_systems(PostStartup, setup)
+        .add_systems(Update, (handle_input, update_simulation));
+
+    // Run the app
+    app.run();
 }
 
 /// Setup our simulation resources
-fn setup(mut commands: Commands, render_device: Res<RenderDevice>, render_queue: Res<RenderQueue>, mut images: ResMut<Assets<Image>>) {
+fn setup(
+    mut commands: Commands,
+    render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
+    mut images: ResMut<Assets<Image>>,
+    mut shaders: ResMut<Assets<Shader>>,
+    mut pipeline_cache: ResMut<PipelineCache>
+) {
     // Create a sampler for texture reads
     let sampler = render_device.create_sampler(&SamplerDescriptor {
         address_mode_u: AddressMode::ClampToEdge,
@@ -121,7 +169,7 @@ fn setup(mut commands: Commands, render_device: Res<RenderDevice>, render_queue:
     // Create uniform buffer for simulation parameters
     let uniform_buffer = render_device.create_buffer(&BufferDescriptor {
         label: Some("Uniform Buffer"),
-        size: std::mem::size_of::<[u32; 3]>() as u64, // width, height, decay/deposit factor
+        size: size_of::<[u32; 3]>() as u64, // width, height, decay/deposit factor
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -134,107 +182,99 @@ fn setup(mut commands: Commands, render_device: Res<RenderDevice>, render_queue:
     });
 
     // Create textures for simulation and display
-    let (trail_texture_a, trail_texture_view_a) = create_trail_texture(&render_device, "Trail Texture A");
-    let (trail_texture_b, trail_texture_view_b) = create_trail_texture(&render_device, "Trail Texture B");
+    let (trail_texture_a, trail_texture_view_a) =
+        create_trail_texture(&render_device, "Trail Texture A");
+    let (trail_texture_b, trail_texture_view_b) =
+        create_trail_texture(&render_device, "Trail Texture B");
     let (display_texture, display_texture_view) = create_display_texture(&render_device);
 
-    let setter_shader;
-    let move_shader;
-    let deposit_shader;
-    let diffusion_shader;
+    // Create shader assets
+    let setter_shader = shaders.add(Shader::from_wgsl(
+        include_str!("shaders/setter.wgsl"),
+        "setter.wgsl",
+    ));
 
-    // Load shader code
-    unsafe {
-        setter_shader = render_device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Setter Shader"),
-            source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shaders/setter.wgsl"))),
-        });
+    let move_shader = shaders.add(Shader::from_wgsl(
+        include_str!("shaders/move.wgsl"),
+        "move.wgsl",
+    ));
 
-        move_shader = render_device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Move Shader"),
-            source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shaders/move.wgsl"))),
-        });
+    let deposit_shader = shaders.add(Shader::from_wgsl(
+        include_str!("shaders/deposit.wgsl"),
+        "deposit.wgsl",
+    ));
 
-        deposit_shader = render_device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Deposit Shader"),
-            source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shaders/deposit.wgsl"))),
-        });
-
-        diffusion_shader = render_device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Diffusion Shader"),
-            source: ShaderSource::Wgsl(Cow::Borrowed(include_str!("../shaders/diffusion.wgsl"))),
-        });
-    }
+    let diffusion_shader = shaders.add(Shader::from_wgsl(
+        include_str!("shaders/diffusion.wgsl"),
+        "diffusion.wgsl",
+    ));
 
     // Define the binding layout
-    let compute_bind_group_layout =
-        render_device.create_bind_group_layout(
-            Some("Compute Bind Group Layout"),
-            &[
-                binding_entry(
-                    0,
-                    BindingType::Texture {
-                        sample_type: TextureSampleType::Float { filterable: false },
-                        view_dimension: TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                ), // Trail Read
-                binding_entry(
-                    0,
-                    BindingType::Sampler(SamplerBindingType::Filtering),
-                ), // Trail Sampler
-                binding_entry(
-                    1,
-                    BindingType::StorageTexture {
-                        view_dimension: TextureViewDimension::D2,
-                        format: TextureFormat::R32Float,
-                        access: StorageTextureAccess::WriteOnly,
-                    },
-                ), // Trail Write
-                binding_entry(
-                    2,
-                    BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                ), // Particles
-                binding_entry(
-                    3,
-                    BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                ), // Counter
-                binding_entry(
-                    4,
-                    BindingType::StorageTexture {
-                        view_dimension: TextureViewDimension::D2,
-                        format: TextureFormat::Rgba8Unorm,
-                        access: StorageTextureAccess::WriteOnly,
-                    },
-                ), // Display FBO
-                binding_entry(
-                    5,
-                    BindingType::Buffer {
-                        ty: BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                ), // Point Params
-                binding_entry(
-                    10,
-                    BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                ), // Uniforms
-            ],
-        );
+    let compute_bind_group_layout = render_device.create_bind_group_layout(
+        Some("Compute Bind Group Layout"),
+        &[
+            binding_entry(
+                0,
+                BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: false },
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+            ), // Trail Read
+            binding_entry(6, BindingType::Sampler(SamplerBindingType::Filtering)), // Trail Sampler
+            binding_entry(
+                1,
+                BindingType::StorageTexture {
+                    view_dimension: TextureViewDimension::D2,
+                    format: TextureFormat::R32Float,
+                    access: StorageTextureAccess::WriteOnly,
+                },
+            ), // Trail Write
+            binding_entry(
+                2,
+                BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            ), // Particles
+            binding_entry(
+                3,
+                BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            ), // Counter
+            binding_entry(
+                4,
+                BindingType::StorageTexture {
+                    view_dimension: TextureViewDimension::D2,
+                    format: TextureFormat::Rgba8Unorm,
+                    access: StorageTextureAccess::WriteOnly,
+                },
+            ), // Display FBO
+            binding_entry(
+                5,
+                BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            ), // Point Params
+            binding_entry(
+                10,
+                BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            ), // Uniforms
+        ],
+    );
 
     // Write initial data to uniform buffer
+    // Make sure all values are consistently u32 to match shader expectations
     let uniform_data = [
         simulation_settings::WIDTH,
         simulation_settings::HEIGHT,
@@ -269,23 +309,79 @@ fn setup(mut commands: Commands, render_device: Res<RenderDevice>, render_queue:
         &sampler,
     );
 
-    // Create pipeline layout
-    let pipeline_layout = render_device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Compute Pipeline Layout"),
-        bind_group_layouts: &[&compute_bind_group_layout],
-        push_constant_ranges: &[],
-    });
+    // Debug: Print information about binding layouts
+    debug!("Compute bind group layout: {:?}", compute_bind_group_layout);
 
-    // Create compute pipelines
-    let setter_pipeline = create_compute_pipeline(&render_device, &pipeline_layout, &setter_shader, "main");
-    let move_pipeline = create_compute_pipeline(&render_device, &pipeline_layout, &move_shader, "main");
-    let deposit_pipeline = create_compute_pipeline(&render_device, &pipeline_layout, &deposit_shader, "main");
-    let diffusion_pipeline = create_compute_pipeline(&render_device, &pipeline_layout, &diffusion_shader, "main");
+    // Create pipeline IDs
+    // Note: This only queues the pipelines for creation. The actual compilation happens
+    // asynchronously, and the pipelines might not be ready immediately
+    let setter_pipeline_id = create_compute_pipeline_id(
+        &mut pipeline_cache,
+        &compute_bind_group_layout,
+        &setter_shader,
+        "main",
+    );
+
+    let move_pipeline_id = create_compute_pipeline_id(
+        &mut pipeline_cache,
+        &compute_bind_group_layout,
+        &move_shader,
+        "main",
+    );
+
+    let deposit_pipeline_id = create_compute_pipeline_id(
+        &mut pipeline_cache,
+        &compute_bind_group_layout,
+        &deposit_shader,
+        "main",
+    );
+
+    let diffusion_pipeline_id = create_compute_pipeline_id(
+        &mut pipeline_cache,
+        &compute_bind_group_layout,
+        &diffusion_shader,
+        "main",
+    );
+
+    pipeline_cache.process_queue();
+
+    // Check the status of all pipelines
+    let mut ready = 0;
+    let mut failed = false;
+    while ready != 4 {
+        for (name, id) in [
+            ("setter", setter_pipeline_id),
+            ("move", move_pipeline_id),
+            ("deposit", deposit_pipeline_id),
+            ("diffusion", diffusion_pipeline_id),
+        ] {
+            match pipeline_cache.get_compute_pipeline_state(id) {
+                CachedPipelineState::Queued => {
+                    debug!("Waiting for {name} pipeline to compile...");
+                }
+                CachedPipelineState::Creating(_task) => {
+                    debug!("Compiling {name} pipeline...");
+                }
+                CachedPipelineState::Ok(_pipeline) => {
+                    debug!("Compiled {name} pipeline");
+                    ready += 1;
+                }
+                CachedPipelineState::Err(e) => {
+                    error!("Failed to compile {name} pipeline: {e}");
+                    failed = true
+                }
+            }
+        }
+
+        if failed {
+            exit(1)
+        }
+        sleep(Duration::from_secs(1))
+    }
 
     // Store all resources
     commands.insert_resource(PhysarumSimulation {
         point_cursor_index: 0,
-        particles_buffer,
         simulation_params_buffer,
         uniform_buffer,
         counter_buffer,
@@ -295,10 +391,15 @@ fn setup(mut commands: Commands, render_device: Res<RenderDevice>, render_queue:
         trail_texture_view_b,
         display_texture,
         display_texture_view,
-        setter_pipeline,
-        move_pipeline,
-        deposit_pipeline,
-        diffusion_pipeline,
+        setter_shader,
+        move_shader,
+        deposit_shader,
+        diffusion_shader,
+        setter_pipeline_id,
+        move_pipeline_id,
+        deposit_pipeline_id,
+        diffusion_pipeline_id,
+        compute_bind_group_layout,
         compute_bind_group_a,
         compute_bind_group_b,
         frame_num: 0,
@@ -317,17 +418,18 @@ fn setup(mut commands: Commands, render_device: Res<RenderDevice>, render_queue:
         TextureDimension::D2,
         &[0, 0, 0, 255],
         TextureFormat::Rgba8Unorm,
-        RenderAssetUsages::all()
+        RenderAssetUsages::all(),
     );
-    display_image.texture_descriptor.usage = TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING;
+    display_image.texture_descriptor.usage =
+        TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING;
     let display_image_handle = images.add(display_image);
 
     // Spawn a sprite that uses our texture
     commands.spawn((
         Sprite::from_image(display_image_handle.clone()),
         PhysarumDisplay {
-            image_handle: display_image_handle
-        }
+            image_handle: display_image_handle,
+        },
     ));
 
     // Setup 2D camera
@@ -338,7 +440,7 @@ fn setup(mut commands: Commands, render_device: Res<RenderDevice>, render_queue:
 fn handle_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut simulation: ResMut<PhysarumSimulation>,
-    render_queue: Res<RenderQueue>
+    render_queue: Res<RenderQueue>,
 ) {
     let mut changed = false;
 
@@ -348,8 +450,8 @@ fn handle_input(
     }
 
     if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::ArrowDown) {
-        simulation.point_cursor_index = (simulation.point_cursor_index + NUMBER_OF_BASE_POINTS - 1)
-            % NUMBER_OF_BASE_POINTS;
+        simulation.point_cursor_index =
+            (simulation.point_cursor_index + NUMBER_OF_BASE_POINTS - 1) % NUMBER_OF_BASE_POINTS;
         changed = true;
     }
 
@@ -357,11 +459,7 @@ fn handle_input(
         // If the preset changed, update the parameters on the GPU
         let params = load_parameters(simulation.point_cursor_index);
         let params_bytes = bytemuck::bytes_of(&params);
-        render_queue.write_buffer(
-            &simulation.simulation_params_buffer,
-            0,
-            params_bytes,
-        );
+        render_queue.write_buffer(&simulation.simulation_params_buffer, 0, params_bytes);
     }
 }
 
@@ -372,6 +470,7 @@ fn update_simulation(
     render_queue: Res<RenderQueue>,
     mut images: ResMut<Assets<Image>>,
     query: Query<&PhysarumDisplay>,
+    pipeline_cache: Res<PipelineCache>,
 ) {
     let mut encoder = render_device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("Physarum Compute Encoder"),
@@ -379,18 +478,46 @@ fn update_simulation(
 
     // Select the correct bind group for this frame to ping-pong the textures
     let (read_bind_group, write_bind_group) = if simulation.frame_num % 2 == 0 {
-        (&simulation.compute_bind_group_a, &simulation.compute_bind_group_b)
+        (
+            &simulation.compute_bind_group_a,
+            &simulation.compute_bind_group_b,
+        )
     } else {
-        (&simulation.compute_bind_group_b, &simulation.compute_bind_group_a)
+        (
+            &simulation.compute_bind_group_b,
+            &simulation.compute_bind_group_a,
+        )
     };
+
+    // Use the pipeline IDs directly
+    let setter_pipeline_id = simulation.setter_pipeline_id;
+    let move_pipeline_id = simulation.move_pipeline_id;
+    let deposit_pipeline_id = simulation.deposit_pipeline_id;
+    let diffusion_pipeline_id = simulation.diffusion_pipeline_id;
 
     // Dispatch Setter Shader: Clears the counter buffer
     {
+        // Update uniform buffer with setter-specific values
+        let uniform_data = [
+            simulation_settings::WIDTH,
+            simulation_settings::HEIGHT,
+            0u32, // value: 0 to clear the counter
+        ];
+        render_queue.write_buffer(
+            &simulation.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&uniform_data),
+        );
+
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("Setter Pass"),
             timestamp_writes: None,
         });
-        compute_pass.set_pipeline(&simulation.setter_pipeline);
+        // We already checked that all pipelines are available, so this should never panic
+        let pipeline = pipeline_cache
+            .get_compute_pipeline(setter_pipeline_id)
+            .expect("Setter pipeline should be available");
+        compute_pass.set_pipeline(pipeline);
         compute_pass.set_bind_group(0, read_bind_group, &[]);
         compute_pass.dispatch_workgroups(
             simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
@@ -401,11 +528,27 @@ fn update_simulation(
 
     // Dispatch Move Shader: Updates particle positions
     {
+        // Update uniform buffer with move-specific values
+        let uniform_data = [
+            simulation_settings::WIDTH,
+            simulation_settings::HEIGHT,
+            simulation_settings::PIXEL_SCALE_FACTOR.to_bits(), // pixelScaleFactor for move shader
+        ];
+        render_queue.write_buffer(
+            &simulation.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&uniform_data),
+        );
+
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("Move Pass"),
             timestamp_writes: None,
         });
-        compute_pass.set_pipeline(&simulation.move_pipeline);
+        // We already checked that all pipelines are available, so this should never panic
+        let pipeline = pipeline_cache
+            .get_compute_pipeline(move_pipeline_id)
+            .expect("Move pipeline should be available");
+        compute_pass.set_pipeline(pipeline);
         compute_pass.set_bind_group(0, read_bind_group, &[]);
         compute_pass.dispatch_workgroups(
             simulation_settings::NUMBER_OF_PARTICLES
@@ -417,11 +560,27 @@ fn update_simulation(
 
     // Dispatch Deposit Shader: Deposits trails from particles
     {
+        // Update uniform buffer with deposit-specific values
+        let uniform_data = [
+            simulation_settings::WIDTH,
+            simulation_settings::HEIGHT,
+            simulation_settings::DEPOSIT_FACTOR.to_bits(), // depositFactor for deposit shader
+        ];
+        render_queue.write_buffer(
+            &simulation.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&uniform_data),
+        );
+
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("Deposit Pass"),
             timestamp_writes: None,
         });
-        compute_pass.set_pipeline(&simulation.deposit_pipeline);
+        // We already checked that all pipelines are available, so this should never panic
+        let pipeline = pipeline_cache
+            .get_compute_pipeline(deposit_pipeline_id)
+            .expect("Deposit pipeline should be available");
+        compute_pass.set_pipeline(pipeline);
         // This pass writes to the *other* texture, so we use the `write_bind_group`
         compute_pass.set_bind_group(0, write_bind_group, &[]);
         compute_pass.dispatch_workgroups(
@@ -433,11 +592,27 @@ fn update_simulation(
 
     // Dispatch Diffusion Shader: Blurs and fades the trail map
     {
+        // Update uniform buffer with diffusion-specific values
+        let uniform_data = [
+            simulation_settings::WIDTH,
+            simulation_settings::HEIGHT,
+            simulation_settings::DECAY_FACTOR.to_bits(), // decayFactor for diffusion shader
+        ];
+        render_queue.write_buffer(
+            &simulation.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&uniform_data),
+        );
+
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("Diffusion Pass"),
             timestamp_writes: None,
         });
-        compute_pass.set_pipeline(&simulation.diffusion_pipeline);
+        // We already checked that all pipelines are available, so this should never panic
+        let pipeline = pipeline_cache
+            .get_compute_pipeline(diffusion_pipeline_id)
+            .expect("Diffusion pipeline should be available");
+        compute_pass.set_pipeline(pipeline);
         // This pass reads the texture written by the deposit shader and writes back to the original
         compute_pass.set_bind_group(0, write_bind_group, &[]);
         compute_pass.dispatch_workgroups(
@@ -448,34 +623,17 @@ fn update_simulation(
     }
 
     // Copy the display texture to our sprite's image
-    if let Ok(physarum_display) = query.get_single() {
+    if let Ok(physarum_display) = query.single() {
         if let Some(image) = images.get_mut(&physarum_display.image_handle) {
-            // In Bevy 0.16, we need to use the GPU texture directly
-            let gpu_image = render_device.create_texture(&TextureDescriptor {
-                label: Some("Display Image Copy"),
-                size: Extent3d {
-                    width: simulation_settings::WIDTH,
-                    height: simulation_settings::HEIGHT,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba8Unorm,
-                usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            
-            // In Bevy 0.16, we need to use a simpler approach
             // Instead of trying to copy textures directly, we'll just update the image data
-            
+
             // Update the image size to match the simulation
             image.resize(Extent3d {
                 width: simulation_settings::WIDTH,
                 height: simulation_settings::HEIGHT,
                 depth_or_array_layers: 1,
             });
-            
+
             // Create a new texture with the same size
             let new_texture = render_device.create_texture(&TextureDescriptor {
                 label: Some("Updated Display Texture"),
@@ -488,10 +646,12 @@ fn update_simulation(
                 sample_count: 1,
                 dimension: TextureDimension::D2,
                 format: TextureFormat::Rgba8Unorm,
-                usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC,
+                usage: TextureUsages::COPY_DST
+                    | TextureUsages::TEXTURE_BINDING
+                    | TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
-            
+
             // Copy from simulation texture to the new texture
             encoder.copy_texture_to_texture(
                 simulation.display_texture.as_image_copy(),
@@ -502,7 +662,7 @@ fn update_simulation(
                     depth_or_array_layers: 1,
                 },
             );
-            
+
             // Update the image data
             image.texture_descriptor.size = Extent3d {
                 width: simulation_settings::WIDTH,
@@ -527,15 +687,15 @@ fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
         (simulation_settings::NUMBER_OF_PARTICLES * simulation_settings::PARTICLE_PARAMETERS_COUNT)
             as usize
     ];
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for i in 0..simulation_settings::NUMBER_OF_PARTICLES as usize {
-        let x = rng.gen_range(0.0..simulation_settings::WIDTH as f32)
+        let x = rng.random_range(0.0..simulation_settings::WIDTH as f32)
             / simulation_settings::WIDTH as f32;
-        let y = rng.gen_range(0.0..simulation_settings::HEIGHT as f32)
+        let y = rng.random_range(0.0..simulation_settings::HEIGHT as f32)
             / simulation_settings::HEIGHT as f32;
-        let angle = rng.gen::<f32>();
-        let species = rng.gen::<f32>(); // Or other parameter
+        let angle = rng.random::<f32>();
+        let species = rng.random::<f32>(); // Or other parameter
 
         let float_as_u16 = |f: f32| (f.clamp(0.0, 1.0) * 65535.0).round() as u16;
 
@@ -599,7 +759,9 @@ fn create_display_texture(render_device: &RenderDevice) -> (Texture, TextureView
         sample_count: 1,
         dimension: TextureDimension::D2,
         format: TextureFormat::Rgba8Unorm,
-        usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC,
+        usage: TextureUsages::STORAGE_BINDING
+            | TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_SRC,
         view_formats: &[],
     });
 
@@ -629,47 +791,54 @@ fn load_parameters(index: usize) -> PointSettings {
     }
 }
 
-fn create_compute_pipeline(
-    render_device: &RenderDevice,
-    layout: &PipelineLayout,
-    module: &ShaderModule,
+fn create_compute_pipeline_id(
+    pipeline_cache: &mut PipelineCache,
+    layout: &BindGroupLayout,
+    shader: &Handle<Shader>,
     entry_point: &str,
-) -> ComputePipeline {
-    // NOTE: This is a placeholder implementation to allow the code to compile
-    // In Bevy 0.16, the pipeline creation API has changed significantly
-    // A proper implementation would need to:
-    // 1. Create a shader using Shader::from_wgsl or similar
-    // 2. Create a ComputePipelineDescriptor with the appropriate fields
-    // 3. Use a PipelineCache to create the pipeline
-    
-    // For now, we'll just create a dummy pipeline
-    // This will compile but won't work correctly at runtime
-    // You'll need to replace this with a proper implementation
-    
-    // Create a dummy pipeline
-    // In a real application, you would use code like:
-    /*
-    let shader = Shader::from_wgsl(
-        include_str!("../shaders/setter.wgsl"),
-        "setter.wgsl",
+) -> CachedComputePipelineId {
+    debug!(
+        "Creating compute pipeline ID with shader handle: {:?}",
+        shader
     );
-    
+    debug!("Bind group layout: {:?}", layout);
+    debug!("Entry point: {}", entry_point);
+
+    // Create a compute pipeline descriptor
     let descriptor = ComputePipelineDescriptor {
-        label: Some(Cow::from(entry_point)),
-        layout: vec![],  // Use auto layout
+        label: Some(Cow::Owned(entry_point.to_string())),
+        layout: vec![layout.clone()],
         push_constant_ranges: vec![],
-        shader: shader_handle,  // You need to get a Handle<Shader>
+        shader: shader.clone(),
         shader_defs: vec![],
-        entry_point: Cow::Borrowed(entry_point),
-        zero_initialize_workgroup_memory: false,
+        entry_point: Cow::Owned(entry_point.to_string()),
+        zero_initialize_workgroup_memory: true,
     };
-    
-    // Use a PipelineCache to create the pipeline
-    pipeline_cache.get_compute_pipeline(descriptor).unwrap()
-    */
-    
-    // Return a placeholder
-    unimplemented!("Pipeline creation needs to be reimplemented for Bevy 0.16")
+
+    debug!("Created pipeline descriptor: {:?}", descriptor);
+
+    // Queue the pipeline for creation and get its ID
+    let pipeline_id = pipeline_cache.queue_compute_pipeline(descriptor);
+    debug!("Queued pipeline with ID: {:?}", pipeline_id);
+
+    pipeline_id
+}
+
+fn create_compute_pipeline(
+    pipeline_cache: &mut PipelineCache,
+    layout: &BindGroupLayout,
+    shader: &Handle<Shader>,
+    entry_point: &str,
+) -> Option<ComputePipeline> {
+    let pipeline_id = create_compute_pipeline_id(pipeline_cache, layout, shader, entry_point);
+
+    // Try to get the pipeline from the cache
+    // Return None if it's not ready yet
+    let pipeline = pipeline_cache
+        .get_compute_pipeline(pipeline_id)
+        .map(|p| p.clone());
+    debug!("Got pipeline from cache: {}", pipeline.is_some());
+    pipeline
 }
 
 fn binding_entry(binding: u32, ty: BindingType) -> BindGroupLayoutEntry {
@@ -702,7 +871,7 @@ fn create_bind_group(
                 resource: BindingResource::TextureView(read_view),
             },
             BindGroupEntry {
-                binding: 0,
+                binding: 6,
                 resource: BindingResource::Sampler(sampler),
             },
             BindGroupEntry {

@@ -8,26 +8,26 @@ struct Uniforms {
 @group(0) @binding(10) var<uniform> uniforms: Uniforms;
 
 struct PointSettings {
-    defaultScalingFactor: f32,
-    SensorDistance0: f32,
-    SD_exponent: f32,
-    SD_amplitude: f32,
-    SensorAngle0: f32,
-    SA_exponent: f32,
-    SA_amplitude: f32,
-    RotationAngle0: f32,
-    RA_exponent: f32,
-    RA_amplitude: f32,
-    MoveDistance0: f32,
-    MD_exponent: f32,
-    MD_amplitude: f32,
-    SensorBias1: f32,
-    SensorBias2: f32,
+    default_scaling_factor: f32,
+    sensor_distance0: f32,
+    sd_exponent: f32,
+    sd_amplitude: f32,
+    sensor_angle0: f32,
+    sa_exponent: f32,
+    sa_amplitude: f32,
+    rotation_angle0: f32,
+    ra_exponent: f32,
+    ra_amplitude: f32,
+    move_distance0: f32,
+    md_exponent: f32,
+    md_amplitude: f32,
+    sensor_bias1: f32,
+    sensor_bias2: f32,
 };
 
 @group(0) @binding(5) var<storage, read> pointParams: array<PointSettings>;
 @group(0) @binding(0) var trailRead: texture_2d<f32>;
-@group(0) @binding(0) var trailSampler: sampler;
+@group(0) @binding(6) var trailSampler: sampler;
 
 struct ParticlesCounter {
     data: array<atomic<u32>>,
@@ -79,7 +79,7 @@ fn getGridValue(pos: vec2<f32>) -> f32 {
         float_mod(pos.x, w) / w,
         float_mod(pos.y, h) / h
     );
-    return textureSample(trailRead, trailSampler, tex_pos).x;
+    return textureSampleLevel(trailRead, trailSampler, tex_pos, 0.0).x;
 }
 
 fn senseFromAngle(angle: f32, pos: vec2<f32>, heading: f32, so: f32) -> f32 {
@@ -102,13 +102,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let direction = vec2<f32>(cos(heading), sin(heading));
 
-    var currentSensedValue = getGridValue(particlePos + params.SensorBias2 * direction + vec2<f32>(0.0, params.SensorBias1));
-    currentSensedValue = clamp(currentSensedValue * params.defaultScalingFactor, 0.000000001, 1.0);
+    var currentSensedValue = getGridValue(particlePos + params.sensor_bias2 * direction + vec2<f32>(0.0, params.sensor_bias1));
+    currentSensedValue = clamp(currentSensedValue * params.default_scaling_factor, 0.000000001, 1.0);
 
-    let sensorDistance = params.SensorDistance0 + params.SD_amplitude * pow(currentSensedValue, params.SD_exponent) * uniforms.pixelScaleFactor;
-    let moveDistance = params.MoveDistance0 + params.MD_amplitude * pow(currentSensedValue, params.MD_exponent) * uniforms.pixelScaleFactor;
-    let sensorAngle = params.SensorAngle0 + params.SA_amplitude * pow(currentSensedValue, params.SA_exponent);
-    let rotationAngle = params.RotationAngle0 + params.RA_amplitude * pow(currentSensedValue, params.RA_exponent);
+    let sensorDistance = params.sensor_distance0 + params.sd_amplitude * pow(currentSensedValue, params.sd_exponent) * uniforms.pixelScaleFactor;
+    let moveDistance = params.move_distance0 + params.md_amplitude * pow(currentSensedValue, params.md_exponent) * uniforms.pixelScaleFactor;
+    let sensorAngle = params.sensor_angle0 + params.sa_amplitude * pow(currentSensedValue, params.sa_exponent);
+    let rotationAngle = params.rotation_angle0 + params.ra_amplitude * pow(currentSensedValue, params.ra_exponent);
 
     let sensedLeft = senseFromAngle(-sensorAngle, particlePos, heading, sensorDistance);
     let sensedMiddle = senseFromAngle(0.0, particlePos, heading, sensorDistance);

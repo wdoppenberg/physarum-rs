@@ -11,28 +11,28 @@ struct Uniforms {
   @group(0) @binding(3) var<storage, read_write> particlesCounter: ParticlesCounter;
 
   @group(0) @binding(0) var trailRead: texture_2d<f32>;
-  @group(0) @binding(0) var trailSampler: sampler;
+  @group(0) @binding(6) var trailSampler: sampler;
   @group(0) @binding(1) var trailWrite: texture_storage_2d<r32float, write>;
   @group(0) @binding(4) var displayWrite: texture_storage_2d<rgba8unorm, write>;
 
   @compute @workgroup_size(32, 32, 1)
   fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
       let pix = vec2<i32>(global_id.xy);
-      let uvPos = vec2<f32>(pix) / vec2<f32>(uniforms.width, uniforms.height);
+      let uvPos = vec2<f32>(pix) / vec2<f32>(f32(uniforms.width), f32(uniforms.height));
 
-      let prevColor = textureSample(trailRead, trailSampler, uvPos).xy;
+      let prevColor = textureSampleLevel(trailRead, trailSampler, uvPos, 0.0).x;
 
       let index = global_id.x * uniforms.height + global_id.y;
       // Atomically load the particle count for the current pixel.
       let count = f32(atomicLoad(&particlesCounter.data[index]));
 
       // Calculate the amount of deposit to add to the trail map.
-      let LIMIT = 100.0;
-      let limitedCount = min(count, LIMIT);
+      let limit = 100.0;
+      let limitedCount = min(count, limit);
       let addedDeposit = sqrt(limitedCount) * uniforms.depositFactor;
 
       // Update the trail map.
-      let val = prevColor.x + addedDeposit;
+      let val = prevColor + addedDeposit;
       textureStore(trailWrite, pix, vec4<f32>(val, 0.0, 0.0, 0.0));
 
       // Determine the display color based on the particle count.

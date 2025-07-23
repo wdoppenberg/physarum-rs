@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.16.1", default-features = false, features = ["bevy_render", "bevy_core_pipeline", "bevy_winit", "x11", "png", "bevy_sprite"] }
+bevy = { version = "0.16.1", features = ["dynamic_linking"] }
 rand = "0.9.2"
 bytemuck = { version = "1.23.1", features = ["derive"] }
 env_logger = "0.10.1"
 smallvec = "1.13.1"
+bevy_render = "0.16.1"
+wgpu = "0.19.1"
+tokio = { version = "1.36.0", features = ["full"] }
