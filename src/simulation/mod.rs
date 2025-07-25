@@ -1,36 +1,40 @@
 pub mod components;
+pub mod render;
 pub mod resources;
 pub mod systems;
 pub mod utils;
-pub mod render;
 
 use bevy::prelude::*;
+use bevy::render::extract_resource::ExtractResourcePlugin;
+use bevy::render::render_graph::RenderGraph;
+use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 
-use systems::*;
 use render::*;
-use resources::PipelineStatus;
+use systems::*;
+use crate::simulation::resources::PhysarumImages;
 
 /// Plugin for the Physarum simulation
 pub struct PhysarumPlugin;
 
 impl Plugin for PhysarumPlugin {
     fn build(&self, app: &mut App) {
+        app
+            .add_plugins(ExtractResourcePlugin::<PhysarumImages>::default());
         // Register the pipeline status resource
-        app.init_resource::<PipelineStatus>();
+        let render_app = app.sub_app_mut(RenderApp);
 
-        // Add systems to setup the simulation
-        app.add_systems(PostStartup, (
-            setup_resources,
-            setup_display,
-        ).chain());
+        render_app
+            .add_systems(RenderStartup, init_physarum_pipeline)
+            .add_systems(
+                Render,
+                prepare_bind_groups.in_set(RenderSystems::PrepareBindGroups),
+            );
 
-        // Add system to check pipeline status
-        app.add_systems(Update, check_pipeline_status);
-
-        // Add systems to update the simulation
-        app.add_systems(Update, (
-            handle_input,
-            update_simulation,
-        ));
+        let mut render_graph: Mut<RenderGraph> = render_app.world_mut().resource_mut();
+        render_graph.add_node(PhysarumSimulationLabel, PhysarumSimulationNode::default());
+        render_graph.add_node_edge(
+            PhysarumSimulationLabel,
+            bevy::render::graph::CameraDriverLabel,
+        );
     }
 }

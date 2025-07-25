@@ -44,29 +44,6 @@ pub fn create_simulation_params_buffer(render_device: &RenderDevice, index: usiz
     })
 }
 
-/// Create a texture for the trail
-pub fn create_trail_texture(render_device: &RenderDevice, label: &str) -> (Texture, TextureView) {
-    let size = Extent3d {
-        width: simulation_settings::WIDTH,
-        height: simulation_settings::HEIGHT,
-        depth_or_array_layers: 1,
-    };
-
-    let texture = render_device.create_texture(&TextureDescriptor {
-        label: Some(label),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: TextureDimension::D2,
-        format: TextureFormat::R32Float,
-        usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
-
-    let view = texture.create_view(&TextureViewDescriptor::default());
-    (texture, view)
-}
-
 /// Create a texture for displaying the simulation
 pub fn create_display_texture(render_device: &RenderDevice) -> (Texture, TextureView) {
     let size = Extent3d {
@@ -122,75 +99,6 @@ pub fn binding_entry(binding: u32, ty: BindingType) -> BindGroupLayoutEntry {
         ty,
         count: None,
     }
-}
-
-/// Create a bind group for the compute shader
-pub fn create_bind_group(
-    render_device: &RenderDevice,
-    layout: &BindGroupLayout,
-    read_view: &TextureView,
-    write_view: &TextureView,
-    particles_buffer: &Buffer,
-    counter_buffer: &Buffer,
-    display_view: &TextureView,
-    params_buffer: &Buffer,
-    uniform_buffer: &Buffer,
-    sampler: &Sampler,
-) -> BindGroup {
-    render_device.create_bind_group(
-        Some("Compute Bind Group"),
-        layout,
-        &[
-            BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::TextureView(read_view),
-            },
-            BindGroupEntry {
-                binding: 6,
-                resource: BindingResource::Sampler(sampler),
-            },
-            BindGroupEntry {
-                binding: 1,
-                resource: BindingResource::TextureView(write_view),
-            },
-            BindGroupEntry {
-                binding: 2,
-                resource: BindingResource::Buffer(BufferBinding {
-                    buffer: particles_buffer,
-                    offset: 0,
-                    size: None,
-                }),
-            },
-            BindGroupEntry {
-                binding: 3,
-                resource: BindingResource::Buffer(BufferBinding {
-                    buffer: counter_buffer,
-                    offset: 0,
-                    size: None,
-                }),
-            },
-            BindGroupEntry {
-                binding: 4,
-                resource: BindingResource::TextureView(display_view),
-            },
-            BindGroupEntry {
-                binding: 5,
-                resource: BindingResource::Buffer(BufferBinding {
-                    buffer: params_buffer,
-                    offset: 0,
-                    size: None,
-                }),
-            },
-            BindGroupEntry {
-                binding: 10,
-                resource: BindingResource::Buffer(BufferBinding {
-                    buffer: uniform_buffer,
-                    offset: 0,
-                    size: None,
-                }),
-            },
-        ],
-    )
 }
 
 /// Pack two f32 values into a u32 using 2x16 unorm format

@@ -1,9 +1,10 @@
+use super::resources::{simulation_settings, PhysarumBuffers};
+use super::resources::{PhysarumBindGroups, PhysarumPipeline};
 use bevy::prelude::*;
+use bevy::render::render_graph::{self, RenderLabel};
 use bevy::render::render_resource::*;
+use bevy::render::renderer::{RenderContext, RenderQueue};
 use std::borrow::Cow;
-use std::thread::sleep;
-use std::time::Duration;
-use super::resources::PipelineStatus;
 
 /// Create a compute pipeline ID and queue it for creation
 pub fn create_compute_pipeline_id(
@@ -18,7 +19,7 @@ pub fn create_compute_pipeline_id(
         push_constant_ranges: Vec::new(),
         shader: shader.clone(),
         shader_defs: vec![],
-        entry_point: Cow::Owned(entry_point.to_string()),
+        entry_point: Some(Cow::Owned(entry_point.to_string())),
         zero_initialize_workgroup_memory: false,
     };
 
@@ -36,78 +37,229 @@ pub fn check_pipeline_ready(
     }
 }
 
-/// System to check if all pipelines are ready
-pub fn check_pipeline_status(
-    mut pipeline_status: ResMut<PipelineStatus>,
-    pipeline_cache: Option<Res<PipelineCache>>,
-    simulation: Option<Res<super::resources::PhysarumSimulation>>,
-) {
-    // Log that the system is running
-    info!("Checking pipeline status...");
-    
-    // If simulation resource doesn't exist yet, we can't check pipeline status
-    let simulation = match simulation {
-        Some(sim) => sim,
-        None => {
-            info!("Simulation resource not available yet");
-            return;
-        }
-    };
-    
-    // If PipelineCache is not available, we can't check pipeline status
-    let pipeline_cache = match pipeline_cache {
-        Some(cache) => cache,
-        None => {
-            info!("PipelineCache not available yet");
-            sleep(Duration::from_secs(1));
-            return;
-        }
-    };
-    
-    // If pipeline IDs are invalid, we can't check pipeline status
-    if simulation.setter_pipeline_id == CachedComputePipelineId::INVALID ||
-       simulation.move_pipeline_id == CachedComputePipelineId::INVALID ||
-       simulation.deposit_pipeline_id == CachedComputePipelineId::INVALID ||
-       simulation.diffusion_pipeline_id == CachedComputePipelineId::INVALID {
-        info!("Pipeline IDs not initialized yet");
-        return;
-    }
-    
-    info!("Checking pipeline status for IDs: setter={:?}, move={:?}, deposit={:?}, diffusion={:?}",
-          simulation.setter_pipeline_id,
-          simulation.move_pipeline_id,
-          simulation.deposit_pipeline_id,
-          simulation.diffusion_pipeline_id);
+/// Label for the Physarum simulation node in the render graph
+#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
+pub struct PhysarumSimulationLabel;
 
-    // Check each pipeline
-    pipeline_status.setter_ready = check_pipeline_ready(&pipeline_cache, simulation.setter_pipeline_id);
-    pipeline_status.move_ready = check_pipeline_ready(&pipeline_cache, simulation.move_pipeline_id);
-    pipeline_status.deposit_ready = check_pipeline_ready(&pipeline_cache, simulation.deposit_pipeline_id);
-    pipeline_status.diffusion_ready = check_pipeline_ready(&pipeline_cache, simulation.diffusion_pipeline_id);
-    
-    // Update all_ready flag
-    pipeline_status.all_ready = 
-        pipeline_status.setter_ready && 
-        pipeline_status.move_ready && 
-        pipeline_status.deposit_ready && 
-        pipeline_status.diffusion_ready;
-    
-    // Log status
-    if pipeline_status.all_ready {
-        info!("All compute pipelines are ready");
-    } else {
-        // Log which pipelines are still pending
-        if !pipeline_status.setter_ready {
-            debug!("Waiting for setter pipeline to compile...");
+enum UpdateState {
+    Ping,
+    Pong,
+}
+
+/// State of the Physarum simulation
+enum PhysarumSimulationState {
+    /// Waiting for pipelines to load
+    Loading,
+    /// Initializing the simulation
+    Init,
+    /// Running the simulation with ping-pong between textures
+    Update(UpdateState),
+}
+
+/// Render graph node for the Physarum simulation
+pub struct PhysarumSimulationNode {
+    state: PhysarumSimulationState,
+}
+
+impl Default for PhysarumSimulationNode {
+    fn default() -> Self {
+        Self {
+            state: PhysarumSimulationState::Loading,
         }
-        if !pipeline_status.move_ready {
-            debug!("Waiting for move pipeline to compile...");
+    }
+}
+
+impl render_graph::Node for PhysarumSimulationNode {
+    fn update(&mut self, world: &mut World) {
+        let pipeline = world.resource::<PhysarumPipeline>();
+        let pipeline_cache = world.resource::<PipelineCache>();
+
+        // Check the current state and transition if needed
+        match self.state {
+            PhysarumSimulationState::Loading => {
+                // Check if all pipelines are ready
+                let setter_ready =
+                    check_pipeline_ready(pipeline_cache, pipeline.setter_pipeline_id);
+                let move_ready = check_pipeline_ready(pipeline_cache, pipeline.move_pipeline_id);
+                let deposit_ready =
+                    check_pipeline_ready(pipeline_cache, pipeline.deposit_pipeline_id);
+                let diffusion_ready =
+                    check_pipeline_ready(pipeline_cache, pipeline.diffusion_pipeline_id);
+
+                if setter_ready && move_ready && deposit_ready && diffusion_ready {
+                    debug!("All pipelines ready, transitioning to Init state");
+                    self.state = PhysarumSimulationState::Init;
+                }
+            }
+            PhysarumSimulationState::Init => {
+                // After initialization, transition to Update state
+                self.state = PhysarumSimulationState::Update(UpdateState::Ping);
+            }
+            PhysarumSimulationState::Update(UpdateState::Ping) => {
+                // Ping-pong between textures
+                self.state = PhysarumSimulationState::Update(UpdateState::Pong);
+            }
+            PhysarumSimulationState::Update(UpdateState::Pong) => {
+                // Ping-pong between textures
+                self.state = PhysarumSimulationState::Update(UpdateState::Ping);
+            }
         }
-        if !pipeline_status.deposit_ready {
-            debug!("Waiting for deposit pipeline to compile...");
+    }
+
+    fn run(
+        &self,
+        _graph: &mut render_graph::RenderGraphContext,
+        render_context: &mut RenderContext,
+        world: &World,
+    ) -> Result<(), render_graph::NodeRunError> {
+        let pipeline_cache = world.resource::<PipelineCache>();
+        let pipeline = world.resource::<PhysarumPipeline>();
+        let [bind_group_a, bind_group_b] = &world.resource::<PhysarumBindGroups>().0;
+        let physarum_buffers = world.resource::<PhysarumBuffers>();
+        let queue = world.resource::<RenderQueue>();
+
+        match &self.state {
+            PhysarumSimulationState::Loading => {}
+            PhysarumSimulationState::Init => {
+                let mut encoder = render_context
+                    .command_encoder()
+                    .begin_compute_pass(&ComputePassDescriptor::default());
+
+                if let Some(pipeline) =
+                    pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
+                {
+                    let uniform_data = [simulation_settings::WIDTH, simulation_settings::HEIGHT, 0];
+                    queue.write_buffer(
+                        &physarum_buffers.uniform_buffer,
+                        0,
+                        bytemuck::cast_slice(&uniform_data),
+                    );
+
+                    encoder.set_pipeline(pipeline);
+                    encoder.set_bind_group(0, bind_group_a, &[]);
+                    encoder.dispatch_workgroups(
+                        simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
+                        simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                        1,
+                    );
+                }
+            }
+            PhysarumSimulationState::Update(swap) => {
+                // Correctly determine which bind group to use for which step
+                let (deposit_bind_group, diffusion_bind_group) = match swap {
+                    UpdateState::Ping => (bind_group_a, bind_group_b),
+                    UpdateState::Pong => (bind_group_b, bind_group_a),
+                };
+
+                {
+                    let mut pass = render_context
+                        .command_encoder()
+                        .begin_compute_pass(&ComputePassDescriptor::default());
+
+                    // 1. Setter Pass (uses the deposit bind group to clear counters)
+                    if let Some(pipeline) =
+                        pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
+                    {
+                        let uniform_data =
+                            [simulation_settings::WIDTH, simulation_settings::HEIGHT, 0];
+                        queue.write_buffer(
+                            &physarum_buffers.uniform_buffer,
+                            0,
+                            bytemuck::cast_slice(&uniform_data),
+                        );
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, deposit_bind_group, &[]);
+                        pass.dispatch_workgroups(
+                            simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
+                            simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                            1,
+                        );
+                    }
+
+                    // 2. Move Pass (reads from the trail map)
+                    if let Some(pipeline) =
+                        pipeline_cache.get_compute_pipeline(pipeline.move_pipeline_id)
+                    {
+                        let uniform_data = [
+                            simulation_settings::WIDTH,
+                            simulation_settings::HEIGHT,
+                            simulation_settings::PIXEL_SCALE_FACTOR.to_bits(),
+                        ];
+                        queue.write_buffer(
+                            &physarum_buffers.uniform_buffer,
+                            0,
+                            bytemuck::cast_slice(&uniform_data),
+                        );
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, deposit_bind_group, &[]);
+                        pass.dispatch_workgroups(
+                            (simulation_settings::NUM_PARTICLES + 127) / 128,
+                            1,
+                            1,
+                        );
+                    }
+                }
+
+                {
+                    let mut pass = render_context
+                        .command_encoder()
+                        .begin_compute_pass(&ComputePassDescriptor::default());
+
+                    // 3. Deposit Pass (reads current trail, writes to other)
+                    if let Some(pipeline) =
+                        pipeline_cache.get_compute_pipeline(pipeline.deposit_pipeline_id)
+                    {
+                        let uniform_data = [
+                            simulation_settings::WIDTH,
+                            simulation_settings::HEIGHT,
+                            simulation_settings::DEPOSIT_FACTOR.to_bits(),
+                        ];
+                        queue.write_buffer(
+                            &physarum_buffers.uniform_buffer,
+                            0,
+                            bytemuck::cast_slice(&uniform_data),
+                        );
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, deposit_bind_group, &[]);
+                        pass.dispatch_workgroups(
+                            simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
+                            simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                            1,
+                        );
+                    }
+                }
+
+                {
+                    let mut pass = render_context
+                        .command_encoder()
+                        .begin_compute_pass(&ComputePassDescriptor::default());
+
+                    // 4. Diffusion Pass (reads deposited trail, writes back for next frame)
+                    if let Some(pipeline) =
+                        pipeline_cache.get_compute_pipeline(pipeline.diffusion_pipeline_id)
+                    {
+                        let uniform_data = [
+                            simulation_settings::WIDTH,
+                            simulation_settings::HEIGHT,
+                            simulation_settings::DECAY_FACTOR.to_bits(),
+                        ];
+                        queue.write_buffer(
+                            &physarum_buffers.uniform_buffer,
+                            0,
+                            bytemuck::cast_slice(&uniform_data),
+                        );
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, diffusion_bind_group, &[]);
+                        pass.dispatch_workgroups(
+                            simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
+                            simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                            1,
+                        );
+                    }
+                }
+            }
         }
-        if !pipeline_status.diffusion_ready {
-            debug!("Waiting for diffusion pipeline to compile...");
-        }
+
+        Ok(())
     }
 }
