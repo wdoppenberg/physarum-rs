@@ -132,7 +132,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let h = f32(uniforms.height);
     var nextPos = vec2<f32>(float_mod(px, w), float_mod(py, h));
 
-    let counter_idx = u32(floor(nextPos.x)) * uniforms.height + u32(floor(nextPos.y));
+    let counter_idx = u32(floor(nextPos.y)) * uniforms.width + u32(floor(nextPos.x));
     atomicAdd(&particlesCounter.data[counter_idx], 1u);
 
     let reinitSegment = 0.0010;

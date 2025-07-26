@@ -4,7 +4,6 @@ use bevy::prelude::*;
 use bevy::render::render_graph::{self, RenderLabel};
 use bevy::render::render_resource::*;
 use bevy::render::renderer::{RenderContext, RenderQueue};
-use std::borrow::Cow;
 
 /// Create a compute pipeline ID and queue it for creation
 pub fn create_compute_pipeline_id(
@@ -19,7 +18,7 @@ pub fn create_compute_pipeline_id(
         push_constant_ranges: Vec::new(),
         shader: shader.clone(),
         shader_defs: vec![],
-        entry_point: Some(Cow::Owned(entry_point.to_string())),
+        entry_point: Some(entry_point.to_owned().into()),
         zero_initialize_workgroup_memory: false,
     };
 
@@ -41,6 +40,7 @@ pub fn check_pipeline_ready(
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
 pub struct PhysarumSimulationLabel;
 
+#[derive(Debug)]
 enum UpdateState {
     Ping,
     Pong,
@@ -93,6 +93,7 @@ impl render_graph::Node for PhysarumSimulationNode {
             }
             PhysarumSimulationState::Init => {
                 // After initialization, transition to Update state
+                info!("Simulation initialized, starting render.");
                 self.state = PhysarumSimulationState::Update(UpdateState::Ping);
             }
             PhysarumSimulationState::Update(UpdateState::Ping) => {
@@ -145,7 +146,6 @@ impl render_graph::Node for PhysarumSimulationNode {
                 }
             }
             PhysarumSimulationState::Update(swap) => {
-                // Correctly determine which bind group to use for which step
                 let (deposit_bind_group, diffusion_bind_group) = match swap {
                     UpdateState::Ping => (bind_group_a, bind_group_b),
                     UpdateState::Pong => (bind_group_b, bind_group_a),
@@ -156,7 +156,30 @@ impl render_graph::Node for PhysarumSimulationNode {
                         .command_encoder()
                         .begin_compute_pass(&ComputePassDescriptor::default());
 
-                    // 1. Setter Pass (uses the deposit bind group to clear counters)
+                    // 1. Deposit Pass FIRST (reads counters from previous frame's move pass)
+                    if let Some(pipeline) =
+                        pipeline_cache.get_compute_pipeline(pipeline.deposit_pipeline_id)
+                    {
+                        let uniform_data = [
+                            simulation_settings::WIDTH,
+                            simulation_settings::HEIGHT,
+                            simulation_settings::DEPOSIT_FACTOR.to_bits(),
+                        ];
+                        queue.write_buffer(
+                            &physarum_buffers.uniform_buffer,
+                            0,
+                            bytemuck::cast_slice(&uniform_data),
+                        );
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, deposit_bind_group, &[]);
+                        pass.dispatch_workgroups(
+                            simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
+                            simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                            1,
+                        );
+                    }
+
+                    // 2. Clear counters AFTER deposit has read them
                     if let Some(pipeline) =
                         pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
                     {
@@ -176,7 +199,7 @@ impl render_graph::Node for PhysarumSimulationNode {
                         );
                     }
 
-                    // 2. Move Pass (reads from the trail map)
+                    // 3. Move Pass (writes new counts for next frame)
                     if let Some(pipeline) =
                         pipeline_cache.get_compute_pipeline(pipeline.move_pipeline_id)
                     {
@@ -200,41 +223,12 @@ impl render_graph::Node for PhysarumSimulationNode {
                     }
                 }
 
+                // 4. Diffusion pass in separate compute pass
                 {
                     let mut pass = render_context
                         .command_encoder()
                         .begin_compute_pass(&ComputePassDescriptor::default());
 
-                    // 3. Deposit Pass (reads current trail, writes to other)
-                    if let Some(pipeline) =
-                        pipeline_cache.get_compute_pipeline(pipeline.deposit_pipeline_id)
-                    {
-                        let uniform_data = [
-                            simulation_settings::WIDTH,
-                            simulation_settings::HEIGHT,
-                            simulation_settings::DEPOSIT_FACTOR.to_bits(),
-                        ];
-                        queue.write_buffer(
-                            &physarum_buffers.uniform_buffer,
-                            0,
-                            bytemuck::cast_slice(&uniform_data),
-                        );
-                        pass.set_pipeline(pipeline);
-                        pass.set_bind_group(0, deposit_bind_group, &[]);
-                        pass.dispatch_workgroups(
-                            simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
-                            simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
-                            1,
-                        );
-                    }
-                }
-
-                {
-                    let mut pass = render_context
-                        .command_encoder()
-                        .begin_compute_pass(&ComputePassDescriptor::default());
-
-                    // 4. Diffusion Pass (reads deposited trail, writes back for next frame)
                     if let Some(pipeline) =
                         pipeline_cache.get_compute_pipeline(pipeline.diffusion_pipeline_id)
                     {
