@@ -41,45 +41,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let col = clamp(vec3<f32>(countColorValue), vec3<f32>(0.0), vec3<f32>(1.0));
 	let outputColor = vec4<f32>(col, 1.0);
 
-	// Create the output color
-//	var outputColor = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-//
-//	// Test 1: Simple linear mapping to see if it works at all
-//	let simpleLinear = clamp(count / 100.0, 0.0, 1.0);
-//	outputColor = vec4<f32>(simpleLinear, simpleLinear, simpleLinear, 1.0);
-
-
-//	var outputColor = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-//
-//	// Debug: Show actual count ranges to understand the scale
-//	if (count == 0.0) {
-//	    outputColor = vec4<f32>(0.0, 0.0, 0.0, 1.0); // Black for no particles
-//	} else if (count >= 1.0 && count < 10.0) {
-//	    outputColor = vec4<f32>(0.1, 0.0, 0.0, 1.0); // Very dark red
-//	} else if (count >= 10.0 && count < 100.0) {
-//	    outputColor = vec4<f32>(0.3, 0.0, 0.0, 1.0); // Dark red
-//	} else if (count >= 100.0 && count < 1000.0) {
-//	    outputColor = vec4<f32>(0.6, 0.0, 0.0, 1.0); // Medium red
-//	} else if (count >= 1000.0 && count < 10000.0) {
-//	    outputColor = vec4<f32>(0.9, 0.0, 0.0, 1.0); // Bright red
-//	} else if (count >= 10000.0) {
-//	    outputColor = vec4<f32>(1.0, 1.0, 1.0, 1.0); // White for extremely high counts
-//	}
-
-//	// Create the output color
-//	var outputColor = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-//
-//	// First, let's see if ANY pixels have count = 0 (meaning counters are being cleared somewhere)
-//	if (count == 0.0) {
-//	    outputColor = vec4<f32>(0.0, 1.0, 0.0, 1.0); // GREEN for zero counts
-//	} else {
-//	    // Show the raw count as a very scaled down value
-//	    let scaledCount = count / 50000.0; // Extreme scaling
-//	    outputColor = vec4<f32>(scaledCount, 0.0, 0.0, 1.0); // Red intensity based on count
-//	}
-
-
-
 	// Write the final color to the display texture.
 	textureStore(displayWrite, pix, outputColor);
 }

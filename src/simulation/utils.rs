@@ -4,14 +4,14 @@ use bevy::render::renderer::RenderDevice;
 use rand::Rng;
 
 use crate::points_basematrix::{NUMBER_OF_BASE_POINTS, PARAMETERS_MATRIX};
-use super::resources::{PointSettings, simulation_settings};
-
+use crate::simulation::constants;
+use crate::simulation::resources::render::PointSettings;
 /// Create a buffer containing the initial particle positions
 pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
     let mut rng = rand::rng();
-    let mut initial_particle_data = Vec::with_capacity(2 * simulation_settings::NUM_PARTICLES as usize);
+    let mut initial_particle_data = Vec::with_capacity(2 * constants::NUM_PARTICLES as usize);
 
-    for _ in 0..simulation_settings::NUM_PARTICLES {
+    for _ in 0..constants::NUM_PARTICLES {
         // Position (packed as 2x16 unorm)
         let x = rng.random::<f32>();
         let y = rng.random::<f32>();
@@ -31,40 +31,6 @@ pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
         contents: bytemuck::cast_slice(&initial_particle_data),
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
     })
-}
-
-/// Create a buffer containing the simulation parameters
-pub fn create_simulation_params_buffer(render_device: &RenderDevice, index: usize) -> Buffer {
-    let params = load_parameters(index);
-    
-    render_device.create_buffer_with_data(&BufferInitDescriptor {
-        label: Some("Simulation Params Buffer"),
-        contents: bytemuck::bytes_of(&params),
-        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-    })
-}
-
-/// Create a texture for displaying the simulation
-pub fn create_display_texture(render_device: &RenderDevice) -> (Texture, TextureView) {
-    let size = Extent3d {
-        width: simulation_settings::WIDTH,
-        height: simulation_settings::HEIGHT,
-        depth_or_array_layers: 1,
-    };
-
-    let texture = render_device.create_texture(&TextureDescriptor {
-        label: Some("Display Texture"),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: TextureDimension::D2,
-        format: TextureFormat::Rgba8Unorm,
-        usage: TextureUsages::STORAGE_BINDING | TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-
-    let view = texture.create_view(&TextureViewDescriptor::default());
-    (texture, view)
 }
 
 /// Load parameters from the parameters matrix

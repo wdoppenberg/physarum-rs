@@ -1,9 +1,9 @@
-use super::resources::{simulation_settings, PhysarumBuffers};
-use super::resources::{PhysarumBindGroups, PhysarumPipeline};
 use bevy::prelude::*;
 use bevy::render::render_graph::{self, RenderLabel};
 use bevy::render::render_resource::*;
 use bevy::render::renderer::{RenderContext, RenderQueue};
+use crate::simulation::constants;
+use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
 
 /// Create a compute pipeline ID and queue it for creation
 pub fn create_compute_pipeline_id(
@@ -129,7 +129,7 @@ impl render_graph::Node for PhysarumSimulationNode {
                 if let Some(pipeline) =
                     pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
                 {
-                    let uniform_data = [simulation_settings::WIDTH, simulation_settings::HEIGHT, 0];
+                    let uniform_data = [constants::WIDTH, constants::HEIGHT, 0];
                     queue.write_buffer(
                         &physarum_buffers.uniform_buffer,
                         0,
@@ -139,8 +139,8 @@ impl render_graph::Node for PhysarumSimulationNode {
                     encoder.set_pipeline(pipeline);
                     encoder.set_bind_group(0, bind_group_a, &[]);
                     encoder.dispatch_workgroups(
-                        simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
-                        simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                        constants::WIDTH / constants::WORK_GROUP_SIZE,
+                        constants::HEIGHT / constants::WORK_GROUP_SIZE,
                         1,
                     );
                 }
@@ -161,9 +161,9 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pipeline_cache.get_compute_pipeline(pipeline.deposit_pipeline_id)
                     {
                         let uniform_data = [
-                            simulation_settings::WIDTH,
-                            simulation_settings::HEIGHT,
-                            simulation_settings::DEPOSIT_FACTOR.to_bits(),
+                            constants::WIDTH,
+                            constants::HEIGHT,
+                            constants::DEPOSIT_FACTOR.to_bits(),
                         ];
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
@@ -173,8 +173,8 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
                         pass.dispatch_workgroups(
-                            simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
-                            simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                            constants::WIDTH / constants::WORK_GROUP_SIZE,
+                            constants::HEIGHT / constants::WORK_GROUP_SIZE,
                             1,
                         );
                     }
@@ -184,7 +184,7 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
                     {
                         let uniform_data =
-                            [simulation_settings::WIDTH, simulation_settings::HEIGHT, 0];
+                            [constants::WIDTH, constants::HEIGHT, 0];
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
                             0,
@@ -193,8 +193,8 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
                         pass.dispatch_workgroups(
-                            simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
-                            simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                            constants::WIDTH / constants::WORK_GROUP_SIZE,
+                            constants::HEIGHT / constants::WORK_GROUP_SIZE,
                             1,
                         );
                     }
@@ -204,9 +204,9 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pipeline_cache.get_compute_pipeline(pipeline.move_pipeline_id)
                     {
                         let uniform_data = [
-                            simulation_settings::WIDTH,
-                            simulation_settings::HEIGHT,
-                            simulation_settings::PIXEL_SCALE_FACTOR.to_bits(),
+                            constants::WIDTH,
+                            constants::HEIGHT,
+                            constants::PIXEL_SCALE_FACTOR.to_bits(),
                         ];
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
@@ -216,7 +216,7 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
                         pass.dispatch_workgroups(
-                            (simulation_settings::NUM_PARTICLES + 127) / 128,
+                            (constants::NUM_PARTICLES + 127) / 128,
                             1,
                             1,
                         );
@@ -233,9 +233,9 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pipeline_cache.get_compute_pipeline(pipeline.diffusion_pipeline_id)
                     {
                         let uniform_data = [
-                            simulation_settings::WIDTH,
-                            simulation_settings::HEIGHT,
-                            simulation_settings::DECAY_FACTOR.to_bits(),
+                            constants::WIDTH,
+                            constants::HEIGHT,
+                            constants::DECAY_FACTOR.to_bits(),
                         ];
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
@@ -245,8 +245,8 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, diffusion_bind_group, &[]);
                         pass.dispatch_workgroups(
-                            simulation_settings::WIDTH / simulation_settings::WORK_GROUP_SIZE,
-                            simulation_settings::HEIGHT / simulation_settings::WORK_GROUP_SIZE,
+                            constants::WIDTH / constants::WORK_GROUP_SIZE,
+                            constants::HEIGHT / constants::WORK_GROUP_SIZE,
                             1,
                         );
                     }

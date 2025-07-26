@@ -1,18 +1,21 @@
-use super::render::*;
-use super::resources::{
-    simulation_settings, PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline,
-    PhysarumSampler,
-};
-use super::utils::*;
-use bevy::prelude::*;
-use bevy::render::render_asset::{RenderAssetUsages, RenderAssets};
-use bevy::render::render_resource::*;
-use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::prelude::{default, Commands, Res, ResMut, Sprite, Transform};
+use bevy::asset::{AssetServer, Assets, RenderAssetUsages};
+use bevy::image::Image;
+use bevy::render::render_resource::{AddressMode, BindGroupEntry, BindingResource, BindingType, BufferBinding, BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages, Extent3d, FilterMode, PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor, StorageTextureAccess, TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDimension};
+use bevy::camera::Camera2d;
+use bevy::math::{Vec2, Vec3};
+use bevy::render::render_asset::RenderAssets;
 use bevy::render::texture::GpuImage;
-use std::mem::size_of;
+use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::log::info;
+use crate::simulation::constants;
+use crate::simulation::render::create_compute_pipeline_id;
+use crate::simulation::resources::main::PhysarumInputState;
+use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler, PhysarumSimulationSettings};
+use crate::simulation::utils::{binding_entry, create_particles_buffer, load_parameters};
 
-pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let (width, height) = (simulation_settings::WIDTH, simulation_settings::HEIGHT);
+pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let (width, height) = (constants::WIDTH, constants::HEIGHT);
 
     let mut display_image = Image::new_fill(
         Extent3d {
@@ -58,43 +61,14 @@ pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Sprite {
             image: display_texture.clone(),
             custom_size: Some(Vec2::new(
-                simulation_settings::WIDTH as f32,
-                simulation_settings::HEIGHT as f32,
+                constants::WIDTH as f32,
+                constants::HEIGHT as f32,
             )),
             ..default()
         },
-        Transform::from_scale(Vec3::splat(simulation_settings::DISPLAY_FACTOR as f32)),
+        Transform::from_scale(Vec3::splat(constants::DISPLAY_FACTOR as f32)),
     ));
 }
-
-/// Handle keyboard input to change simulation parameters
-// pub fn handle_input(
-// 	keys: Res<ButtonInput<KeyCode>>,
-// 	mut simulation: ResMut<PhysarumSimulation>,
-// 	render_queue: Res<RenderQueue>,
-// ) {
-// 	let mut changed = false;
-//
-// 	if keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::ArrowUp) {
-// 		simulation.point_cursor_index =
-// 			(simulation.point_cursor_index + 1) % crate::points_basematrix::NUMBER_OF_BASE_POINTS;
-// 		changed = true;
-// 	}
-//
-// 	if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::ArrowDown) {
-// 		simulation.point_cursor_index =
-// 			(simulation.point_cursor_index + crate::points_basematrix::NUMBER_OF_BASE_POINTS - 1)
-// 				% crate::points_basematrix::NUMBER_OF_BASE_POINTS;
-// 		changed = true;
-// 	}
-//
-// 	if changed {
-// 		// If the preset changed, update the parameters on the GPU
-// 		let params = load_parameters(simulation.point_cursor_index);
-// 		let params_bytes = bytemuck::bytes_of(&params);
-// 		render_queue.write_buffer(&simulation.simulation_params_buffer, 0, params_bytes);
-// 	}
-// }
 
 fn create_bind_group_entries<'a>(
     read_texture_view: &'a TextureView,
@@ -230,7 +204,23 @@ pub fn init_physarum_pipeline(
 
     // Create the initial buffers
     let particles_buffer = create_particles_buffer(&render_device);
-    let params_buffer = create_simulation_params_buffer(&render_device, 1);
+
+    // Simulation parameters (start at 0)
+    let index = 0;
+    let point_settings = load_parameters(index);
+
+    commands.insert_resource(PhysarumSimulationSettings {
+        index,
+        point_settings
+    });
+
+    let params_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+        label: Some("Simulation Params Buffer"),
+        contents: bytemuck::bytes_of(&point_settings),
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+    });
+
+
 
     // Create uniform buffer for simulation parameters
     let uniform_buffer = render_device.create_buffer(&BufferDescriptor {
@@ -243,15 +233,15 @@ pub fn init_physarum_pipeline(
     // Write initial data to uniform buffer
     // Make sure all values are consistently u32 to match shader expectations
     let uniform_data = [
-        simulation_settings::WIDTH,
-        simulation_settings::HEIGHT,
-        simulation_settings::DECAY_FACTOR.to_bits(),
+        constants::WIDTH,
+        constants::HEIGHT,
+        constants::DECAY_FACTOR.to_bits(),
     ];
     render_queue.write_buffer(&uniform_buffer, 0, bytemuck::cast_slice(&uniform_data));
 
     let counter_buffer = render_device.create_buffer(&BufferDescriptor {
         label: Some("Counter Buffer"),
-        size: (simulation_settings::WIDTH * simulation_settings::HEIGHT * 4) as u64, // 4 bytes per u32
+        size: (constants::WIDTH * constants::HEIGHT * 4) as u64, // 4 bytes per u32
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -374,4 +364,23 @@ pub fn init_physarum_pipeline(
         deposit_pipeline_id,
         diffusion_pipeline_id,
     });
+}
+
+/// Update simulation parameters in the render world
+pub fn update_simulation_params(
+    mut input_state: ResMut<PhysarumInputState>,
+    buffers: Res<PhysarumBuffers>,
+    render_queue: Res<RenderQueue>,
+    mut simulation_settings: ResMut<PhysarumSimulationSettings>,
+) {
+    if input_state.settings_changed {
+        simulation_settings.index = input_state.new_index;
+        simulation_settings.point_settings = load_parameters(simulation_settings.index);
+
+        let params_bytes = bytemuck::bytes_of(&simulation_settings.point_settings);
+        render_queue.write_buffer(&buffers.params_buffer, 0, params_bytes);
+
+        // Reset the flag
+        input_state.settings_changed = false;
+    }
 }
