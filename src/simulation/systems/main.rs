@@ -12,13 +12,13 @@ pub fn handle_input(
     let mut new_index = input_state.new_index;
 
     if keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::Space) {
-        new_index = (new_index + 1) % crate::points_basematrix::NUMBER_OF_BASE_POINTS;
+        new_index = (new_index + 1) % crate::simulation::constants::NUMBER_OF_BASE_POINTS;
         changed = true;
     }
 
     if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::ArrowDown) {
-        new_index = (new_index + crate::points_basematrix::NUMBER_OF_BASE_POINTS - 1)
-            % crate::points_basematrix::NUMBER_OF_BASE_POINTS;
+        new_index = (new_index + crate::simulation::constants::NUMBER_OF_BASE_POINTS - 1)
+            % crate::simulation::constants::NUMBER_OF_BASE_POINTS;
         changed = true;
     }
 

@@ -3,8 +3,8 @@ use bevy::render::render_resource::*;
 use bevy::render::renderer::RenderDevice;
 use rand::Rng;
 
-use crate::points_basematrix::{NUMBER_OF_BASE_POINTS, PARAMETERS_MATRIX};
 use crate::simulation::constants;
+use crate::simulation::constants::{NUMBER_OF_BASE_POINTS, PARAMETERS_MATRIX};
 use crate::simulation::resources::render::PointSettings;
 /// Create a buffer containing the initial particle positions
 pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {

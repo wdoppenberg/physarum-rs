@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 
-mod points_basematrix;
 pub mod simulation;
 
 use simulation::plugin::PhysarumPlugin;

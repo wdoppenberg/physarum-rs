@@ -26,10 +26,10 @@ pub struct PointSettings {
 }
 
 #[derive(Resource, Clone)]
-pub(crate) struct PhysarumSampler(pub Sampler);
+pub struct PhysarumSampler(pub Sampler);
 
 #[derive(Resource, Clone)]
-pub(crate) struct PhysarumBuffers {
+pub struct PhysarumBuffers {
     pub(crate) uniform_buffer: Buffer,
     pub(crate) counter_buffer: Buffer,
     pub(crate) particles_buffer: Buffer,
@@ -37,7 +37,7 @@ pub(crate) struct PhysarumBuffers {
 }
 
 #[derive(Resource, Clone, ExtractResource)]
-pub(crate) struct PhysarumImages {
+pub struct PhysarumImages {
     pub(crate) texture_a: Handle<Image>,
     pub(crate) texture_b: Handle<Image>,
     pub(crate) display_texture: Handle<Image>
