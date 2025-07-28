@@ -30,10 +30,7 @@ pub fn check_pipeline_ready(
     pipeline_cache: &PipelineCache,
     pipeline_id: CachedComputePipelineId,
 ) -> bool {
-    match pipeline_cache.get_compute_pipeline_state(pipeline_id) {
-        CachedPipelineState::Ok(_) => true,
-        _ => false,
-    }
+    matches!(pipeline_cache.get_compute_pipeline_state(pipeline_id), CachedPipelineState::Ok(_))
 }
 
 /// Label for the Physarum simulation node in the render graph
@@ -216,11 +213,11 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_bind_group(0, deposit_bind_group, &[]);
 
                         // Calculate 2D dispatch to avoid exceeding 65535 limit
-                        let total_groups = (constants::NUM_PARTICLES + 127) / 128;
+                        let total_groups = constants::NUM_PARTICLES.div_ceil(128);
                         const MAX_GROUPS_PER_DIM: u32 = 65535;
 
                         let dispatch_x = std::cmp::min(total_groups, MAX_GROUPS_PER_DIM);
-                        let dispatch_y = (total_groups + dispatch_x - 1) / dispatch_x;
+                        let dispatch_y = total_groups.div_ceil(dispatch_x);
 
                         pass.dispatch_workgroups(dispatch_x, dispatch_y, 1);
                     }

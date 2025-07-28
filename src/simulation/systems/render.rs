@@ -108,7 +108,7 @@ fn create_bind_group_entries<'a>(
         },
         BindGroupEntry {
             binding: 4,
-            resource: BindingResource::TextureView(&display_texture_view),
+            resource: BindingResource::TextureView(display_texture_view),
         },
         BindGroupEntry {
             binding: 5,
