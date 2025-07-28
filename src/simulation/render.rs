@@ -1,9 +1,9 @@
+use crate::simulation::constants;
+use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
 use bevy::prelude::*;
 use bevy::render::render_graph::{self, RenderLabel};
 use bevy::render::render_resource::*;
 use bevy::render::renderer::{RenderContext, RenderQueue};
-use crate::simulation::constants;
-use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
 
 /// Create a compute pipeline ID and queue it for creation
 pub fn create_compute_pipeline_id(
@@ -183,8 +183,7 @@ impl render_graph::Node for PhysarumSimulationNode {
                     if let Some(pipeline) =
                         pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
                     {
-                        let uniform_data =
-                            [constants::WIDTH, constants::HEIGHT, 0];
+                        let uniform_data = [constants::WIDTH, constants::HEIGHT, 0];
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
                             0,
@@ -215,11 +214,15 @@ impl render_graph::Node for PhysarumSimulationNode {
                         );
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
-                        pass.dispatch_workgroups(
-                            (constants::NUM_PARTICLES + 127) / 128,
-                            1,
-                            1,
-                        );
+
+                        // Calculate 2D dispatch to avoid exceeding 65535 limit
+                        let total_groups = (constants::NUM_PARTICLES + 127) / 128;
+                        const MAX_GROUPS_PER_DIM: u32 = 65535;
+
+                        let dispatch_x = std::cmp::min(total_groups, MAX_GROUPS_PER_DIM);
+                        let dispatch_y = (total_groups + dispatch_x - 1) / dispatch_x;
+
+                        pass.dispatch_workgroups(dispatch_x, dispatch_y, 1);
                     }
                 }
 

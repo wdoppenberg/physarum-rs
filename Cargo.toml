@@ -8,3 +8,6 @@ bevy = { git = "https://github.com/bevyengine/bevy.git", rev = "4b1b70d50", feat
 rand = "0.9.2"
 bytemuck = { version = "1.23.1", features = ["derive"] }
 tokio = { version = "1.36.0", features = ["full"] }
+
+[profile.dev.package]
+bevy = { opt-level = 3 }

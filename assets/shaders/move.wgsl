@@ -87,15 +87,24 @@ fn senseFromAngle(angle: f32, pos: vec2<f32>, heading: f32, so: f32) -> f32 {
     return getGridValue(sense_pos);
 }
 
+const DISPATCH_WIDTH = 65535u;
+
 @compute @workgroup_size(128, 1, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    // Calculate particle index from 2D dispatch
+    let particle_idx = global_id.y * DISPATCH_WIDTH + global_id.x;
+
+    // Early return if we're beyond the number of particles
+    if (particle_idx >= 10000000u) { // Use your NUM_PARTICLES constant here
+        return;
+    }
 
     let params = pointParams[0];
-    let particle_idx = global_id.x;
 
     let particlePosPacked = particlesArray.data[2u * particle_idx];
     var particlePos = unpack2x16unorm(particlePosPacked) * vec2<f32>(f32(uniforms.width), f32(uniforms.height));
 
+    // Rest of your existing shader code remains the same...
     let curProgressAndHeadingPacked = particlesArray.data[2u * particle_idx + 1u];
     let curProgressAndHeading = unpack2x16unorm(curProgressAndHeadingPacked) * vec2<f32>(1.0, 2.0 * pi);
     var heading = curProgressAndHeading.y;
