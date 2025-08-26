@@ -1,32 +1,86 @@
-use bevy::prelude::{KeyCode, Res, ResMut};
+use bevy::prelude::{KeyCode, Res, ResMut, Query, With, Vec2, Time};
 use bevy::input::ButtonInput;
 use bevy::log::info;
+use bevy::window::{PrimaryWindow, Window};
 use crate::simulation::resources::main::PhysarumInputState;
 use crate::simulation::utils::load_parameters;
+use crate::simulation::constants;
 
-/// Handle keyboard input to change simulation parameters (main world)
+/// Handle keyboard/mouse input to change simulation parameters and interactive uniforms (main world)
 pub fn handle_input(
     keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
     mut input_state: ResMut<PhysarumInputState>,
+    q_windows: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let mut changed = false;
+    // 1) Accumulate time
+    input_state.time += time.delta_secs();
+
+    // 2) Mouse position to action coordinates
+    if let Ok(win) = q_windows.single() {
+        if let Some(pos) = win.cursor_position() {
+            // Map cursor directly to simulation pixel coordinates (clamped)
+            let x = pos.x.clamp(0.0, constants::WIDTH as f32 - 1.0);
+            let y = (win.height() - pos.y).clamp(0.0, constants::HEIGHT as f32 - 1.0); // flip Y so origin at bottom
+            input_state.action_x = x;
+            input_state.action_y = y;
+        }
+    }
+
+    // 3) Keyboard controls
+    let mut changed_params_index = false;
     let mut new_index = input_state.new_index;
 
-    if keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::Space) {
-        new_index = (new_index + 1) % crate::simulation::constants::NUMBER_OF_BASE_POINTS;
-        changed = true;
+    // Cycle through presets
+    if keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::KeyR) {
+        new_index = (new_index + 1) % constants::NUMBER_OF_BASE_POINTS;
+        changed_params_index = true;
     }
-
     if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::ArrowDown) {
-        new_index = (new_index + crate::simulation::constants::NUMBER_OF_BASE_POINTS - 1)
-            % crate::simulation::constants::NUMBER_OF_BASE_POINTS;
-        changed = true;
+        new_index = (new_index + constants::NUMBER_OF_BASE_POINTS - 1) % constants::NUMBER_OF_BASE_POINTS;
+        changed_params_index = true;
     }
 
-    if changed {
+    if changed_params_index {
         info!("Simulation settings changed to {}", new_index);
         input_state.settings_changed = true;
         input_state.new_index = new_index;
         input_state.current_settings = load_parameters(new_index);
+    }
+
+    // Movement bias with WASD
+    let mut bias = Vec2::ZERO;
+    if keys.pressed(KeyCode::KeyW) { bias.y += 1.0; }
+    if keys.pressed(KeyCode::KeyS) { bias.y -= 1.0; }
+    if keys.pressed(KeyCode::KeyA) { bias.x -= 1.0; }
+    if keys.pressed(KeyCode::KeyD) { bias.x += 1.0; }
+    if bias.length_squared() > 0.0 { bias = bias.normalize(); }
+    input_state.move_bias_action_x = bias.x;
+    input_state.move_bias_action_y = bias.y;
+    input_state.l2_action = bias.length();
+
+    // Spawn triggers
+    if keys.just_pressed(KeyCode::KeyF) {
+        input_state.spawn_particles = 1; // circular spawn around action
+    }
+    if keys.just_pressed(KeyCode::KeyD) {
+        input_state.spawn_particles = 2; // multiple spots (shader currently handles >=1 same)
+    }
+    // Let the spawn flag last only one frame (handled here by clearing if no key press this frame)
+    if !(keys.just_pressed(KeyCode::KeyF) || keys.just_pressed(KeyCode::KeyD)) {
+        input_state.spawn_particles = 0;
+    }
+
+    // Adjust action area sigma with C / X
+    if keys.pressed(KeyCode::KeyC) {
+        input_state.action_area_size_sigma = (input_state.action_area_size_sigma + 0.001).clamp(0.01, 1.5);
+    }
+    if keys.pressed(KeyCode::KeyX) {
+        input_state.action_area_size_sigma = (input_state.action_area_size_sigma - 0.001).clamp(0.01, 1.5);
+    }
+
+    // Cycle color modes with P / H / A
+    if keys.just_pressed(KeyCode::KeyP) || keys.just_pressed(KeyCode::KeyH) || keys.just_pressed(KeyCode::KeyA) {
+        input_state.color_mode = (input_state.color_mode + 1) % 10; // cycle through first 10 modes
     }
 }
