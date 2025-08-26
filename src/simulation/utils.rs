@@ -9,7 +9,7 @@ use crate::simulation::resources::render::PointSettings;
 /// Create a buffer containing the initial particle positions
 pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
     let mut rng = rand::rng();
-    let mut initial_particle_data = Vec::with_capacity(2 * constants::NUM_PARTICLES as usize);
+    let mut initial_particle_data = Vec::with_capacity(3 * constants::NUM_PARTICLES as usize);
 
     for _ in 0..constants::NUM_PARTICLES {
         // Position (packed as 2x16 unorm)
@@ -24,6 +24,10 @@ pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
         let heading_normalized = heading / (2.0 * std::f32::consts::PI); // Normalize to 0-1
         let progress_heading_packed = pack_2x16_unorm(progress, heading_normalized);
         initial_particle_data.push(progress_heading_packed);
+
+        // Velocity (packed as 2x16 float halves) - initialize to 0
+        // Represented as f16 in both components; we just push 0u32 here
+        initial_particle_data.push(0u32);
     }
 
     render_device.create_buffer_with_data(&BufferInitDescriptor {

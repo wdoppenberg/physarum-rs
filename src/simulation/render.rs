@@ -135,6 +135,17 @@ impl render_graph::Node for PhysarumSimulationNode {
                         height: constants::HEIGHT,
                         value: constants::DEPOSIT_FACTOR,
                         color_mode: constants::COLOR_MODE,
+                        num_particles: constants::NUM_PARTICLES,
+                        time: 0.0,
+                        action_area_size_sigma: 0.0,
+                        action_x: 0.0,
+                        action_y: 0.0,
+                        move_bias_action_x: 0.0,
+                        move_bias_action_y: 0.0,
+                        l2_action: 0.0,
+                        spawn_particles: 0,
+                        spawn_fraction: 0.0,
+                        random_spawn_number: 0,
                     };
 
                     let mut buffer = encase::UniformBuffer::new(Vec::new());
@@ -171,6 +182,17 @@ impl render_graph::Node for PhysarumSimulationNode {
                             height: constants::HEIGHT,
                             value: constants::DEPOSIT_FACTOR,
                             color_mode: constants::COLOR_MODE,
+                            num_particles: constants::NUM_PARTICLES,
+                            time: 0.0,
+                            action_area_size_sigma: 0.0,
+                            action_x: 0.0,
+                            action_y: 0.0,
+                            move_bias_action_x: 0.0,
+                            move_bias_action_y: 0.0,
+                            l2_action: 0.0,
+                            spawn_particles: 0,
+                            spawn_fraction: 0.0,
+                            random_spawn_number: 0,
                         };
 
                         let mut buffer = encase::UniformBuffer::new(Vec::new());
@@ -199,6 +221,17 @@ impl render_graph::Node for PhysarumSimulationNode {
                             height: constants::HEIGHT,
                             value: 0.,
                             color_mode: constants::COLOR_MODE,
+                            num_particles: constants::NUM_PARTICLES,
+                            time: 0.0,
+                            action_area_size_sigma: 0.0,
+                            action_x: 0.0,
+                            action_y: 0.0,
+                            move_bias_action_x: 0.0,
+                            move_bias_action_y: 0.0,
+                            l2_action: 0.0,
+                            spawn_particles: 0,
+                            spawn_fraction: 0.0,
+                            random_spawn_number: 0,
                         };
                         let mut buffer = encase::UniformBuffer::new(Vec::new());
                         buffer.write(&uniform_data).unwrap();
@@ -226,6 +259,17 @@ impl render_graph::Node for PhysarumSimulationNode {
                             height: constants::HEIGHT,
                             value: constants::PIXEL_SCALE_FACTOR,
                             color_mode: constants::COLOR_MODE,
+                            num_particles: constants::NUM_PARTICLES,
+                            time: 0.0,
+                            action_area_size_sigma: 0.0,
+                            action_x: 0.0,
+                            action_y: 0.0,
+                            move_bias_action_x: 0.0,
+                            move_bias_action_y: 0.0,
+                            l2_action: 0.0,
+                            spawn_particles: 0,
+                            spawn_fraction: 0.0,
+                            random_spawn_number: 0,
                         };
                         let mut buffer = encase::UniformBuffer::new(Vec::new());
                         buffer.write(&uniform_data).unwrap();
@@ -263,6 +307,17 @@ impl render_graph::Node for PhysarumSimulationNode {
                             height: constants::HEIGHT,
                             value: constants::DECAY_FACTOR,
                             color_mode: constants::COLOR_MODE,
+                            num_particles: constants::NUM_PARTICLES,
+                            time: 0.0,
+                            action_area_size_sigma: 0.0,
+                            action_x: 0.0,
+                            action_y: 0.0,
+                            move_bias_action_x: 0.0,
+                            move_bias_action_y: 0.0,
+                            l2_action: 0.0,
+                            spawn_particles: 0,
+                            spawn_fraction: 0.0,
+                            random_spawn_number: 0,
                         };
                         let mut buffer = encase::UniformBuffer::new(Vec::new());
                         buffer.write(&uniform_data).unwrap();

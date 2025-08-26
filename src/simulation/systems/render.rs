@@ -215,16 +215,18 @@ pub fn init_physarum_pipeline(
         point_settings
     });
 
+    // Provide two point settings (pen/background). For now, duplicate the same settings.
+    let params_pair = [point_settings, point_settings];
     let params_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
         label: Some("Simulation Params Buffer"),
-        contents: bytemuck::bytes_of(&point_settings),
+        contents: bytemuck::cast_slice(&params_pair),
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
     });
 
     // Create uniform buffer for simulation parameters
     let uniform_buffer = render_device.create_buffer(&BufferDescriptor {
         label: Some("Uniform Buffer"),
-        size: size_of::<[u32; 4]>() as u64, // width, height, decay/deposit factor, color mode
+        size: size_of::<UniformData>() as u64,
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -236,6 +238,17 @@ pub fn init_physarum_pipeline(
         height: constants::HEIGHT,
         value: constants::DECAY_FACTOR,
         color_mode: constants::COLOR_MODE,
+        num_particles: constants::NUM_PARTICLES,
+        time: 0.0,
+        action_area_size_sigma: 0.0,
+        action_x: 0.0,
+        action_y: 0.0,
+        move_bias_action_x: 0.0,
+        move_bias_action_y: 0.0,
+        l2_action: 0.0,
+        spawn_particles: 0,
+        spawn_fraction: 0.0,
+        random_spawn_number: 0,
     };
     let mut buffer = encase::UniformBuffer::new(Vec::new());
     buffer.write(&uniform_data).unwrap();
@@ -381,7 +394,8 @@ pub fn update_simulation_params(
         simulation_settings.index = input_state.new_index;
         simulation_settings.point_settings = input_state.current_settings;
 
-        let params_bytes = bytemuck::bytes_of(&simulation_settings.point_settings);
+        let params_pair = [simulation_settings.point_settings, simulation_settings.point_settings];
+        let params_bytes = bytemuck::cast_slice(&params_pair);
         render_queue.write_buffer(&buffers.params_buffer, 0, params_bytes);
 
         // Reset the flag

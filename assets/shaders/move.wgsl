@@ -3,8 +3,19 @@ const pi = 3.14159265359;
 struct Uniforms {
     width: u32,
     height: u32,
-    pixelScaleFactor: f32,
+    value: f32,          // pixelScaleFactor provided via 'value'
     colorMode: u32,
+    num_particles: u32,
+    time: f32,
+    actionAreaSizeSigma: f32,
+    actionX: f32,
+    actionY: f32,
+    moveBiasActionX: f32,
+    moveBiasActionY: f32,
+    L2Action: f32,
+    spawnParticles: u32,
+    spawnFraction: f32,
+    randomSpawnNumber: u32,
 };
 @group(0) @binding(10) var<uniform> uniforms: Uniforms;
 
@@ -68,6 +79,26 @@ fn random01FromParticle(particlePos: vec2<f32>) -> f32 {
 
 // --- Simulation Logic ---
 
+// Simple 3D value noise (ported)
+fn random3(st: vec3<f32>) -> f32 {
+    return fract(sin(dot(st, vec3<f32>(12.9898, 78.233, 151.7182))) * 43758.5453123);
+}
+
+fn noise3(st: vec3<f32>) -> f32 {
+    let i = floor(st);
+    let F = fract(st);
+    let a = random3(i);
+    let b = random3(i + vec3<f32>(1.0, 0.0, 0.0));
+    let c = random3(i + vec3<f32>(0.0, 1.0, 0.0));
+    let d = random3(i + vec3<f32>(1.0, 1.0, 0.0));
+    let e = random3(i + vec3<f32>(0.0, 0.0, 1.0));
+    let f = random3(i + vec3<f32>(1.0, 0.0, 1.0));
+    let g = random3(i + vec3<f32>(0.0, 1.0, 1.0));
+    let h = random3(i + vec3<f32>(1.0, 1.0, 1.0));
+    let u = F * F * (3.0 - 2.0 * F);
+    return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y), mix(mix(e, f, u.x), mix(g, h, u.x), u.y), u.z);
+}
+
 fn float_mod(x: f32, y: f32) -> f32 {
     return x - y * floor(x / y);
 }
@@ -96,67 +127,157 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let particle_idx = global_id.y * DISPATCH_WIDTH + global_id.x;
 
     // Early return if we're beyond the number of particles
-    if (particle_idx >= 10000000u) { // Use your NUM_PARTICLES constant here
+    if (particle_idx >= uniforms.num_particles) {
         return;
     }
 
-    let params = pointParams[0];
-
-    let particlePosPacked = particlesArray.data[2u * particle_idx];
+    // Load particle data
+    let pos_idx = 3u * particle_idx;
+    let particlePosPacked = particlesArray.data[pos_idx];
     var particlePos = unpack2x16unorm(particlePosPacked) * vec2<f32>(f32(uniforms.width), f32(uniforms.height));
 
-    // Rest of your existing shader code remains the same...
-    let curProgressAndHeadingPacked = particlesArray.data[2u * particle_idx + 1u];
+    let curProgressAndHeadingPacked = particlesArray.data[pos_idx + 1u];
     let curProgressAndHeading = unpack2x16unorm(curProgressAndHeadingPacked) * vec2<f32>(1.0, 2.0 * pi);
     var heading = curProgressAndHeading.y;
 
+    var velocity = unpack2x16float(particlesArray.data[pos_idx + 2u]);
+
+    // Parameters
+    let p_bg = pointParams[1]; // background
+    let p_pen = pointParams[0]; // pen
+
+    let w = f32(uniforms.width);
+    let h = f32(uniforms.height);
+
+    // Normalized positions
+    let normalizedPosition = vec2<f32>(particlePos.x / w, particlePos.y / h);
+    let normalizedActionPosition = vec2<f32>(uniforms.actionX / w, uniforms.actionY / h);
+
+    // Noise helpers
+    let noiseScale = 20.0;
+    let noiseScale2 = 6.0;
+    let positionForNoise1 = vec2<f32>(normalizedPosition.x * (w / h), normalizedPosition.y) * noiseScale;
+    let positionForNoise2 = vec2<f32>(normalizedPosition.x * (w / h), normalizedPosition.y) * noiseScale2;
+
+    // Lerp factor around action using gaussian
+    var positionFromAction = normalizedPosition - normalizedActionPosition;
+    positionFromAction.x = positionFromAction.x * (w / h);
+
+
+    let distanceNoiseFactor = 0.9 + 0.2 * noise3(vec3<f32>(positionForNoise2.x, positionForNoise2.y, 0.6 * uniforms.time));
+    let distanceFromAction = length(positionFromAction) * distanceNoiseFactor;
+    let lerper = exp(-distanceFromAction * distanceFromAction / max(1e-6, uniforms.actionAreaSizeSigma) / max(1e-6, uniforms.actionAreaSizeSigma));
+
+    // Wave effect disabled for now (requires arrays); keep as zero
+    let waveSum = 0.0;
+
+    // Sensed value with bias and scaling
     let direction = vec2<f32>(cos(heading), sin(heading));
 
-    var currentSensedValue = getGridValue(particlePos + params.sensor_bias2 * direction + vec2<f32>(0.0, params.sensor_bias1));
-    currentSensedValue = clamp(currentSensedValue * params.default_scaling_factor, 0.000000001, 1.0);
+    let tunedSensorScaler_mix = mix(p_bg.default_scaling_factor, p_pen.default_scaling_factor, lerper) * (1.0 + 0.3 * waveSum);
+    let sensorBias1_mix = mix(p_bg.sensor_bias1, p_pen.sensor_bias1, lerper);
+    let sensorBias2_mix = mix(p_bg.sensor_bias2, p_pen.sensor_bias2, lerper);
 
-    let sensorDistance = params.sensor_distance0 + params.sd_amplitude * pow(currentSensedValue, params.sd_exponent) * uniforms.pixelScaleFactor;
-    let moveDistance = params.move_distance0 + params.md_amplitude * pow(currentSensedValue, params.md_exponent) * uniforms.pixelScaleFactor;
-    let sensorAngle = params.sensor_angle0 + params.sa_amplitude * pow(currentSensedValue, params.sa_exponent);
-    let rotationAngle = params.rotation_angle0 + params.ra_amplitude * pow(currentSensedValue, params.ra_exponent);
+    var currentSensedValue = getGridValue(particlePos + sensorBias2_mix * direction + vec2<f32>(0.0, sensorBias1_mix)) * tunedSensorScaler_mix;
+    currentSensedValue = clamp(currentSensedValue, 1e-9, 1.0);
 
+    // Mix parameters
+    let SensorDistance0_mix = mix(p_bg.sensor_distance0, p_pen.sensor_distance0, lerper);
+    let SD_amplitude_mix = mix(p_bg.sd_amplitude, p_pen.sd_amplitude, lerper);
+    let SD_exponent_mix = mix(p_bg.sd_exponent, p_pen.sd_exponent, lerper);
+
+    let MoveDistance0_mix = mix(p_bg.move_distance0, p_pen.move_distance0, lerper);
+    let MD_amplitude_mix = mix(p_bg.md_amplitude, p_pen.md_amplitude, lerper);
+    let MD_exponent_mix = mix(p_bg.md_exponent, p_pen.md_exponent, lerper);
+
+    let SensorAngle0_mix = mix(p_bg.sensor_angle0, p_pen.sensor_angle0, lerper);
+    let SA_amplitude_mix = mix(p_bg.sa_amplitude, p_pen.sa_amplitude, lerper);
+    let SA_exponent_mix = mix(p_bg.sa_exponent, p_pen.sa_exponent, lerper);
+
+    let RotationAngle0_mix = mix(p_bg.rotation_angle0, p_pen.rotation_angle0, lerper);
+    let RA_amplitude_mix = mix(p_bg.ra_amplitude, p_pen.ra_amplitude, lerper);
+    let RA_exponent_mix = mix(p_bg.ra_exponent, p_pen.ra_exponent, lerper);
+
+    let sensorDistance = SensorDistance0_mix + SD_amplitude_mix * pow(currentSensedValue, SD_exponent_mix) * uniforms.value;
+    let moveDistance = MoveDistance0_mix + MD_amplitude_mix * pow(currentSensedValue, MD_exponent_mix) * uniforms.value;
+    let sensorAngle = SensorAngle0_mix + SA_amplitude_mix * pow(currentSensedValue, SA_exponent_mix);
+    let rotationAngle = RotationAngle0_mix + RA_amplitude_mix * pow(currentSensedValue, RA_exponent_mix);
+
+    // Sensing 3 directions
     let sensedLeft = senseFromAngle(-sensorAngle, particlePos, heading, sensorDistance);
     let sensedMiddle = senseFromAngle(0.0, particlePos, heading, sensorDistance);
     let sensedRight = senseFromAngle(sensorAngle, particlePos, heading, sensorDistance);
 
     var newHeading = heading;
     if (sensedMiddle > sensedLeft && sensedMiddle > sensedRight) {
-        // Continue straight
+        // keep
     } else if (sensedMiddle < sensedLeft && sensedMiddle < sensedRight) {
-        newHeading += rotationAngle * (2.0 * step(0.5, random01FromParticle(particlePos)) - 1.0);
+        newHeading = select(heading + rotationAngle, heading - rotationAngle, random01FromParticle(particlePos) < 0.5);
     } else if (sensedRight < sensedLeft) {
-        newHeading -= rotationAngle;
+        newHeading = heading - rotationAngle;
     } else if (sensedLeft < sensedRight) {
-        newHeading += rotationAngle;
+        newHeading = heading + rotationAngle;
     }
 
-    let px = particlePos.x + moveDistance * cos(newHeading);
-    let py = particlePos.y + moveDistance * sin(newHeading);
+    // Move bias from action and noise
+    let noiseValue = noise3(vec3<f32>(positionForNoise1.x, positionForNoise1.y, 0.8 * uniforms.time));
+    let moveBiasFactor = 5.0 * lerper * noiseValue;
+    let moveBias = moveBiasFactor * vec2<f32>(uniforms.moveBiasActionX, uniforms.moveBiasActionY);
 
-    let w = f32(uniforms.width);
-    let h = f32(uniforms.height);
-    var nextPos = vec2<f32>(float_mod(px, w), float_mod(py, h));
+    // Classic position
+    let classicNewPosition = particlePos + vec2<f32>(moveDistance * cos(newHeading), moveDistance * sin(newHeading)) + moveBias;
 
-    let counter_idx = u32(floor(nextPos.y)) * uniforms.width + u32(floor(nextPos.x));
+    // Inertia
+    velocity = velocity * 0.98;
+    let vf = 1.0;
+    let velocityBias = 0.2 * uniforms.L2Action;
+    let vx = velocity.x + vf * cos(newHeading) + velocityBias * moveBias.x;
+    let vy = velocity.y + vf * sin(newHeading) + velocityBias * moveBias.y;
+
+    let dt = 0.07 * pow(moveDistance, 1.4);
+    let inertiaNewPosition = particlePos + dt * vec2<f32>(vx, vy) + moveBias;
+
+    let moveStyleLerper = 0.6 * uniforms.L2Action + 0.8 * waveSum;
+    var nextPos = mix(classicNewPosition, inertiaNewPosition, moveStyleLerper);
+
+    // Spawning (limited: circular spawn only when spawnParticles == 1)
+    if (uniforms.spawnParticles >= 1u) {
+        let randForChoice = random01FromParticle(particlePos * 1.1);
+        if (randForChoice < uniforms.spawnFraction) {
+            let randForRadius = random01FromParticle(particlePos * 2.2);
+            // circular spawn
+            let randForTheta = random01FromParticle(particlePos * 3.3);
+            let theta = randForTheta * pi * 2.0;
+            let r1 = uniforms.actionAreaSizeSigma * 0.55 * (0.95 + 0.1 * randForRadius);
+            let spos = r1 * vec2<f32>(cos(theta), sin(theta));
+            let spos_px = spos * h;
+            nextPos = vec2<f32>(uniforms.actionX + spos_px.x, uniforms.actionY + spos_px.y);
+        }
+    }
+
+    // Wrap positions
+    nextPos = vec2<f32>(float_mod(nextPos.x + w, w), float_mod(nextPos.y + h, h));
+
+    // Deposit counter
+    let xi = u32(round(clamp(nextPos.x, 0.0, w - 1.0)));
+    let yi = u32(round(clamp(nextPos.y, 0.0, h - 1.0)));
+    let counter_idx = yi * uniforms.width + xi;
     atomicAdd(&particlesCounter.data[counter_idx], 1u);
 
+    // Respawn
     let reinitSegment = 0.0010;
-    let curProgress = curProgressAndHeading.x;
-    if (curProgress < reinitSegment) {
+    let curA = curProgressAndHeading.x;
+    if (curA < reinitSegment) {
         nextPos = randomPosFromParticle(particlePos);
     }
-
-    let nextA = fract(curProgress + reinitSegment);
+    let nextA = fract(curA + reinitSegment);
 
     let nextPosUV = nextPos / vec2<f32>(w, h);
     let newHeadingNorm = fract(newHeading / (2.0 * pi));
     let nextAandHeading = vec2<f32>(nextA, newHeadingNorm);
 
-    particlesArray.data[2u * particle_idx] = pack2x16unorm(nextPosUV);
-    particlesArray.data[2u * particle_idx + 1u] = pack2x16unorm(nextAandHeading);
+    // Store back
+    particlesArray.data[pos_idx] = pack2x16unorm(nextPosUV);
+    particlesArray.data[pos_idx + 1u] = pack2x16unorm(nextAandHeading);
+    particlesArray.data[pos_idx + 2u] = pack2x16float(vec2<f32>(vx, vy));
 }
