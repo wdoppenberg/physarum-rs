@@ -19,13 +19,18 @@ pub fn handle_input(
     // 2) Mouse position to action coordinates
     if let Ok(win) = q_windows.single() {
         if let Some(pos) = win.cursor_position() {
-            // Map cursor directly to simulation pixel coordinates (clamped)
-            let x = pos.x.clamp(0.0, constants::WIDTH as f32 - 1.0);
-            let y = (win.height() - pos.y).clamp(0.0, constants::HEIGHT as f32 - 1.0); // flip Y so origin at bottom
+            // Scale window coordinates to simulation coordinates
+            let sim_width = win.resolution.width();
+            let sim_height = win.resolution.height();
+
+            let x = (pos.x / win.width() * sim_width).clamp(0.0, sim_width - 1.0);
+            let y = ((1.0 - pos.y / win.height()) * sim_height).clamp(0.0, sim_height - 1.0);
+
             input_state.action_x = x;
             input_state.action_y = y;
         }
     }
+
 
     // 3) Keyboard controls
     let mut changed_params_index = false;
@@ -50,10 +55,10 @@ pub fn handle_input(
 
     // Movement bias with WASD
     let mut bias = Vec2::ZERO;
-    if keys.pressed(KeyCode::KeyW) { bias.y += 1.0; }
-    if keys.pressed(KeyCode::KeyS) { bias.y -= 1.0; }
-    if keys.pressed(KeyCode::KeyA) { bias.x -= 1.0; }
-    if keys.pressed(KeyCode::KeyD) { bias.x += 1.0; }
+    if keys.pressed(KeyCode::KeyW) { bias.y += 10.0; }
+    if keys.pressed(KeyCode::KeyS) { bias.y -= 10.0; }
+    if keys.pressed(KeyCode::KeyA) { bias.x -= 10.0; }
+    if keys.pressed(KeyCode::KeyD) { bias.x += 10.0; }
     if bias.length_squared() > 0.0 { bias = bias.normalize(); }
     input_state.move_bias_action_x = bias.x;
     input_state.move_bias_action_y = bias.y;
