@@ -2,6 +2,7 @@ struct Uniforms {
 	width: u32,
 	height: u32,
 	depositFactor: f32,
+	colorMode: u32,
 };
 @group(0) @binding(10) var<uniform> uniforms: Uniforms;
 
@@ -15,28 +16,200 @@ struct ParticlesCounter {
 @group(0) @binding(1) var trailWrite: texture_storage_2d<r32float, write>;
 @group(0) @binding(4) var displayWrite: texture_storage_2d<rgba8unorm, write>;
 
-// Color scheme selector (0-5)
-// 0: Original grayscale
-// 1: Color gradient based on density
-// 2: Multi-channel trail system
-// 3: Heat map style
-// 4: Organic fungus colors
-// 5: Position-based animation
-const COLOR_SCHEME: u32 = 1u;
+/////////////////////////////////////
+// Color utility functions
 
-// Heat map color function
-fn heatMapColor(value: f32) -> vec3<f32> {
-    let v = clamp(value, 0.0, 1.0);
-    
-    if (v < 0.25) {
-        return mix(vec3<f32>(0.0, 0.0, 0.5), vec3<f32>(0.0, 0.5, 1.0), v * 4.0);
-    } else if (v < 0.5) {
-        return mix(vec3<f32>(0.0, 0.5, 1.0), vec3<f32>(0.0, 1.0, 0.5), (v - 0.25) * 4.0);
-    } else if (v < 0.75) {
-        return mix(vec3<f32>(0.0, 1.0, 0.5), vec3<f32>(1.0, 1.0, 0.0), (v - 0.5) * 4.0);
-    } else {
-        return mix(vec3<f32>(1.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), (v - 0.75) * 4.0);
-    }
+fn rgb2hsv(c: vec3<f32>) -> vec3<f32> {
+    let K = vec4<f32>(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    let p = mix(vec4<f32>(c.b, c.g, K.w, K.z), vec4<f32>(c.g, c.b, K.x, K.y), step(c.b, c.g));
+    let q = mix(vec4<f32>(p.x, p.y, p.w, c.r), vec4<f32>(c.r, p.y, p.z, p.x), step(p.x, c.r));
+
+    let d = q.x - min(q.w, q.y);
+    let e = 1.0e-10;
+    return vec3<f32>(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+
+fn changeHue(hsv: vec3<f32>, hueChange: f32) -> vec3<f32> {
+    var result = hsv;
+    result.x += hueChange;
+    result.x = result.x % 1.0;
+    return result;
+}
+
+fn hsv2rgb(c: vec3<f32>) -> vec3<f32> {
+    let K = vec4<f32>(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    let p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, vec3<f32>(0.0), vec3<f32>(1.0)), c.y);
+}
+
+fn pal(t: f32, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+/////////////////////////////////////
+// Gradient interpolation functions
+
+fn interpolateGradient5(f: f32, cols: array<vec3<f32>, 5>) -> vec3<f32> {
+    let fc = clamp(f, 0.0, 1.0);
+    let cur = fc * 4.0;
+    let icur = i32(floor(cur));
+    let next = min(icur + 1, 4);
+    return mix(cols[icur], cols[next], fract(cur));
+}
+
+fn interpolateGradient6(f: f32, cols: array<vec3<f32>, 6>) -> vec3<f32> {
+    let fc = clamp(f, 0.0, 1.0);
+    let cur = fc * 5.0;
+    let icur = i32(floor(cur));
+    let next = min(icur + 1, 5);
+    return mix(cols[icur], cols[next], fract(cur));
+}
+
+fn interpolateGradient7(f: f32, cols: array<vec3<f32>, 7>) -> vec3<f32> {
+    let fc = clamp(f, 0.0, 1.0);
+    let cur = fc * 6.0;
+    let icur = i32(floor(cur));
+    let next = min(icur + 1, 6);
+    return mix(cols[icur], cols[next], fract(cur));
+}
+
+// Color palettes
+fn gradZorgPurple(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 5>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.07, 0.18, 0.38),
+        vec3<f32>(1.0, 0.0, 0.56),
+        vec3<f32>(0.58, 1.0, 0.2)
+    );
+    return interpolateGradient5(f, cols);
+}
+
+fn gradOrangeBlue(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 7>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.1, 0.2, 0.4),
+        vec3<f32>(0.0, 0.5, 0.6),
+        vec3<f32>(0.8, 0.4, 0.2),
+        vec3<f32>(0.9, 0.6, 0.3),
+        vec3<f32>(1.0, 0.9, 0.0)
+    );
+    return interpolateGradient7(f, cols);
+}
+
+fn gradGreen(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 7>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.3, 0.2),
+        vec3<f32>(0.1, 0.7, 0.7),
+        vec3<f32>(0.8, 0.5, 0.3),
+        vec3<f32>(0.9, 0.7, 0.5),
+        vec3<f32>(1.0, 1.0, 1.0)
+    );
+    return interpolateGradient7(f, cols);
+}
+
+fn gradTealSunset(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 7>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.05, 0.2, 0.3),
+        vec3<f32>(0.2, 0.4, 0.5),
+        vec3<f32>(0.6, 0.3, 0.4),
+        vec3<f32>(0.8, 0.4, 0.3),
+        vec3<f32>(1.0, 0.5, 0.2)
+    );
+    return interpolateGradient7(f, cols);
+}
+
+fn gradForestNight(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 7>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.1, 0.0),
+        vec3<f32>(0.0, 0.3, 0.2),
+        vec3<f32>(0.1, 0.4, 0.4),
+        vec3<f32>(0.3, 0.6, 0.6),
+        vec3<f32>(0.8, 0.9, 1.0)
+    );
+    return interpolateGradient7(f, cols);
+}
+
+fn gradPurpleFire(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 7>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.1, 0.3, 0.6),
+        vec3<f32>(0.3, 0.2, 0.5),
+        vec3<f32>(0.7, 0.2, 0.3),
+        vec3<f32>(0.9, 0.5, 0.2),
+        vec3<f32>(1.0, 0.9, 0.1)
+    );
+    return interpolateGradient7(f, cols);
+}
+
+fn gradArctic(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 7>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.1, 0.3),
+        vec3<f32>(0.0, 0.3, 0.5),
+        vec3<f32>(0.1, 0.6, 0.8),
+        vec3<f32>(0.4, 0.8, 1.0),
+        vec3<f32>(0.85, 0.96, 1.0)
+    );
+    return interpolateGradient7(f, cols);
+}
+
+fn gradCyan(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 7>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.3, 0.4),
+        vec3<f32>(0.0, 0.5, 0.6),
+        vec3<f32>(0.1, 0.7, 0.8),
+        vec3<f32>(0.3, 0.9, 0.9),
+        vec3<f32>(0.6, 1.0, 1.0)
+    );
+    return interpolateGradient7(f, cols);
+}
+
+fn gradNeonInferno(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 6>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.2, 0.0, 0.3),
+        vec3<f32>(0.6, 0.0, 0.6),
+        vec3<f32>(0.8, 0.1, 0.2),
+        vec3<f32>(1.0, 0.5, 0.1),
+        vec3<f32>(1.0, 1.0, 1.0)
+    );
+    return interpolateGradient6(f, cols);
+}
+
+fn gradSolarDrift(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 7>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.3, 0.1, 0.0),
+        vec3<f32>(0.6, 0.2, 0.0),
+        vec3<f32>(0.9, 0.5, 0.1),
+        vec3<f32>(1.0, 0.8, 0.2),
+        vec3<f32>(1.0, 0.95, 0.7)
+    );
+    return interpolateGradient7(f, cols);
+}
+
+fn gradPlasmaTwilight(f: f32) -> vec3<f32> {
+    let cols = array<vec3<f32>, 5>(
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.2, 0.5),
+        vec3<f32>(0.2, 0.4, 0.9),
+        vec3<f32>(0.5, 0.2, 0.7),
+        vec3<f32>(1.0, 0.3, 0.7)
+    );
+    return interpolateGradient5(f, cols);
 }
 
 @compute @workgroup_size(32, 32, 1)
@@ -44,90 +217,117 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 	let pix = vec2<i32>(global_id.xy);
 	let uvPos = vec2<f32>(pix) / vec2<f32>(f32(uniforms.width), f32(uniforms.height));
 
-	let prevColor = textureSampleLevel(trailRead, trailSampler, uvPos, 0.0).x;
+	// Read previous trail intensity (single-channel R32 texture)
+	let prevVal = textureSampleLevel(trailRead, trailSampler, uvPos, 0.0).x;
 
 	let index = global_id.y * uniforms.width + global_id.x;
 
-	// Atomically load the particle count for the current pixel.
+	// Get particle count for this pixel
 	let count = f32(atomicLoad(&particlesCounter.data[index]));
 
-	// Calculate the amount of deposit to add to the trail map.
-	let limit = 100.0;
-	let limitedCount = min(count, limit);
+	// Calculate deposit using the same formula as OpenGL version
+	let LIMIT = 100.0;
+	let limitedCount = min(count, LIMIT);
 	let addedDeposit = sqrt(limitedCount) * uniforms.depositFactor;
 
-	// Update the trail map.
-	let val = prevColor + addedDeposit;
+	// Update trail map (using .xy components)
+	let val = prevVal + addedDeposit;
+	// Write back to trail texture (single channel)
 	textureStore(trailWrite, pix, vec4<f32>(val, 0.0, 0.0, 0.0));
 
-	// Determine the display color based on the particle count.
-	let countColorValue = tanh(pow(count / 10.0, 1.7));
-	
-	// Choose color scheme based on the constant
-	var col: vec3<f32>;
-	
-	switch(COLOR_SCHEME) {
-		case 0u: {
-			// Original grayscale
-			col = clamp(vec3<f32>(countColorValue), vec3<f32>(0.0), vec3<f32>(1.0));
-		}
-		case 1u: {
-			// Color gradient based on density
-			col = mix(
-				vec3<f32>(0.0, 0.0, 0.0),  // Black for low density
-				mix(
-					vec3<f32>(0.8, 0.2, 0.1),  // Orange-red for medium density
-					vec3<f32>(1.0, 1.0, 0.3),  // Bright yellow for high density
-					smoothstep(0.3, 0.8, countColorValue)
-				),
-				smoothstep(0.0, 0.5, countColorValue)
-			);
-		}
-		case 2u: {
-			// Multi-channel trail system (simulate with different factors)
-			let redValue = countColorValue;
-			let greenValue = countColorValue * 0.7;
-			let blueValue = countColorValue * 0.4;
-			col = clamp(vec3<f32>(redValue, greenValue, blueValue), vec3<f32>(0.0), vec3<f32>(1.0));
-		}
-		case 3u: {
-			// Heat map style coloring
-			col = heatMapColor(countColorValue);
-		}
-		case 4u: {
-			// Organic fungus colors
-			// Base mycelium color (pale cream/white)
-			let baseColor = vec3<f32>(0.9, 0.85, 0.7);
-			// Growth areas (reddish-brown)
-			let growthColor = vec3<f32>(0.6, 0.3, 0.2);
-			// Dense areas (dark brown/purple)
-			let denseColor = vec3<f32>(0.4, 0.2, 0.3);
+	// Calculate color intensity from particle count (matching OpenGL formula)
+	let countColorValue = pow(tanh(7.5 * pow(max(0.0, (count - 1.0) / 1000.0), 0.3)), 8.5) * 1.1;
+	let clampedCountColor = min(1.0, countColorValue);
 
-			col = mix(
-				baseColor,
-				mix(growthColor, denseColor, smoothstep(0.4, 0.9, countColorValue)),
-				countColorValue
-			);
+	// Estimate a local motion/edge metric from gradient magnitude to drive color dynamics
+	let texel = vec2<f32>(1.0 / f32(uniforms.width), 1.0 / f32(uniforms.height));
+	let sL = textureSampleLevel(trailRead, trailSampler, uvPos - vec2<f32>(texel.x, 0.0), 0.0).x;
+	let sR = textureSampleLevel(trailRead, trailSampler, uvPos + vec2<f32>(texel.x, 0.0), 0.0).x;
+	let sD = textureSampleLevel(trailRead, trailSampler, uvPos - vec2<f32>(0.0, texel.y), 0.0).x;
+	let sU = textureSampleLevel(trailRead, trailSampler, uvPos + vec2<f32>(0.0, texel.y), 0.0).x;
+	let dx = sR - sL;
+	let dy = sU - sD;
+	let grad = clamp(length(vec2<f32>(dx, dy)) * 10.0, 0.0, 1.0);
+
+	// Calculate radial offset for color changes
+	let pos = vec2<f32>(pix) - vec2<f32>(f32(uniforms.width) * 0.5, f32(uniforms.height) * 0.5);
+	let normalizedPos = pos * (2.0 / f32(uniforms.width + uniforms.height)) * 0.6;
+	let offset = length(normalizedPos);
+
+	// Use gradient as a dynamic blender (reacts to edges/motion)
+	let blend = smoothstep(0.0, 0.6, grad) * 0.9 + 0.1 * offset;
+	let col2 = vec3<f32>(clampedCountColor);
+
+	// Color mode selection
+	var col: vec3<f32>;
+
+	switch(uniforms.colorMode) {
+		case 0u: { // white on black from particle counts
+			col = vec3<f32>(clampedCountColor);
+		}
+		case 1u: { // "blueish orange/purple"
+			let col1 = gradPurpleFire(tanh(clampedCountColor * 1.3));
+			let col3 = gradArctic(tanh(clampedCountColor * 1.3));
+			col = mix(col1, col3, blend);
+			col = clamp(1.25 * col, vec3<f32>(0.0), vec3<f32>(1.0));
+		}
+		case 2u: { // icy blue
+			let col1 = gradArctic(fract(tanh(clampedCountColor * 0.6 + offset) + 0.15));
+			col = mix(col1, col2, blend);
+		}
+		case 3u: { // orange over purple, not very saturated
+			let col1 = gradPurpleFire(tanh(clampedCountColor * 1.3));
+			col = mix(col1, col2, blend);
+		}
+		case 4u: { // gold over dark green
+			let col1 = gradOrangeBlue(tanh(clampedCountColor * 1.3 + offset));
+			col = mix(col1, col2, blend);
 		}
 		case 5u: {
-			// Position-based color animation (simulating time with position)
-			// Using uvPos coordinates to simulate time variation
-			let pseudoTime = uvPos.x + uvPos.y;
-			
-			col = vec3<f32>(
-				countColorValue * (0.5 + 0.5 * sin(pseudoTime * 15.0)),
-				countColorValue * (0.5 + 0.5 * sin(pseudoTime * 15.0 + 2.0)),
-				countColorValue * (0.5 + 0.5 * sin(pseudoTime * 15.0 + 4.0))
-			);
+			let col1 = gradNeonInferno(tanh(clampedCountColor * 1.3));
+			col = mix(col1, col2, blend);
+		}
+		case 6u: { // pink/purple (from z0rg)
+			let col1 = gradZorgPurple(fract(tanh(clampedCountColor * 0.6 + offset) + 0.15));
+			let col3 = gradArctic(tanh(clampedCountColor * 1.3));
+			let mixedCol = mix(col1, col3, blend);
+			col = clamp(1.5 * pow(mixedCol, vec3<f32>(1.1)), vec3<f32>(0.0), vec3<f32>(1.0));
+		}
+		case 7u: {
+			let col1 = gradNeonInferno(tanh(clampedCountColor * 1.3));
+			let col3 = gradArctic(tanh(clampedCountColor * 1.3));
+			col = mix(col1, col3, blend);
+			col = clamp(1.1 * col, vec3<f32>(0.0), vec3<f32>(1.0));
+		}
+		case 8u: { // bright is yellow, over blue background
+			let col1 = gradOrangeBlue(tanh(clampedCountColor * 1.3 + offset));
+			let colGreen = gradGreen(tanh(clampedCountColor * 2.3 + offset));
+			let col2_ = mix(vec3<f32>(clamp(1.3 * clampedCountColor, 0.0, 1.0)), colGreen, 0.5);
+			let motionMix = 0.6 * blend + 0.4 * smoothstep(0.0, 1.0, grad);
+			let col3 = mix(col2_, col1, motionMix);
+			let col4 = gradOrangeBlue(tanh(clampedCountColor * 1.3 + offset));
+			let col5 = vec3<f32>(clampedCountColor);
+			var col6 = 1.25 * mix(col4, col5, blend);
+			col6 = pow(col6, vec3<f32>(2.0));
+			col = max(col6, col3);
+		}
+		case 9u: { // green
+			let col1 = gradGreen(tanh(clampedCountColor * 1.3));
+			col = mix(col1, col2, blend);
+		}
+		case 10000u: { // smooth/blurry cyan with red movement
+			let cyan = vec3<f32>(0.0, 1.0, 1.0) * clampedCountColor;
+			let red = vec3<f32>(1.0, 0.0, 0.0) * grad;
+			col = clamp(cyan + red, vec3<f32>(0.0), vec3<f32>(1.0));
 		}
 		default: {
 			// Fallback to grayscale
-			col = clamp(vec3<f32>(countColorValue), vec3<f32>(0.0), vec3<f32>(1.0));
+			col = vec3<f32>(clampedCountColor);
 		}
 	}
-	
+
+	col = clamp(col, vec3<f32>(0.0), vec3<f32>(1.0));
 	let outputColor = vec4<f32>(col, 1.0);
 
-	// Write the final color to the display texture.
 	textureStore(displayWrite, pix, outputColor);
 }

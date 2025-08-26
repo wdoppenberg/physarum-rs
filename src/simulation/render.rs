@@ -1,3 +1,4 @@
+use crate::simulation::buffers::UniformData;
 use crate::simulation::constants;
 use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
 use bevy::prelude::*;
@@ -30,7 +31,10 @@ pub fn check_pipeline_ready(
     pipeline_cache: &PipelineCache,
     pipeline_id: CachedComputePipelineId,
 ) -> bool {
-    matches!(pipeline_cache.get_compute_pipeline_state(pipeline_id), CachedPipelineState::Ok(_))
+    matches!(
+        pipeline_cache.get_compute_pipeline_state(pipeline_id),
+        CachedPipelineState::Ok(_)
+    )
 }
 
 /// Label for the Physarum simulation node in the render graph
@@ -126,12 +130,17 @@ impl render_graph::Node for PhysarumSimulationNode {
                 if let Some(pipeline) =
                     pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
                 {
-                    let uniform_data = [constants::WIDTH, constants::HEIGHT, 0];
-                    queue.write_buffer(
-                        &physarum_buffers.uniform_buffer,
-                        0,
-                        bytemuck::cast_slice(&uniform_data),
-                    );
+                    let uniform_data = UniformData {
+                        width: constants::WIDTH,
+                        height: constants::HEIGHT,
+                        value: constants::DEPOSIT_FACTOR,
+                        color_mode: constants::COLOR_MODE,
+                    };
+
+                    let mut buffer = encase::UniformBuffer::new(Vec::new());
+                    buffer.write(&uniform_data).unwrap();
+
+                    queue.write_buffer(&physarum_buffers.uniform_buffer, 0, &buffer.into_inner());
 
                     encoder.set_pipeline(pipeline);
                     encoder.set_bind_group(0, bind_group_a, &[]);
@@ -157,15 +166,20 @@ impl render_graph::Node for PhysarumSimulationNode {
                     if let Some(pipeline) =
                         pipeline_cache.get_compute_pipeline(pipeline.deposit_pipeline_id)
                     {
-                        let uniform_data = [
-                            constants::WIDTH,
-                            constants::HEIGHT,
-                            constants::DEPOSIT_FACTOR.to_bits(),
-                        ];
+                        let uniform_data = UniformData {
+                            width: constants::WIDTH,
+                            height: constants::HEIGHT,
+                            value: constants::DEPOSIT_FACTOR,
+                            color_mode: constants::COLOR_MODE,
+                        };
+
+                        let mut buffer = encase::UniformBuffer::new(Vec::new());
+                        buffer.write(&uniform_data).unwrap();
+
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
                             0,
-                            bytemuck::cast_slice(&uniform_data),
+                            &buffer.into_inner(),
                         );
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
@@ -180,11 +194,19 @@ impl render_graph::Node for PhysarumSimulationNode {
                     if let Some(pipeline) =
                         pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
                     {
-                        let uniform_data = [constants::WIDTH, constants::HEIGHT, 0];
+                        let uniform_data = UniformData {
+                            width: constants::WIDTH,
+                            height: constants::HEIGHT,
+                            value: 0.,
+                            color_mode: constants::COLOR_MODE,
+                        };
+                        let mut buffer = encase::UniformBuffer::new(Vec::new());
+                        buffer.write(&uniform_data).unwrap();
+
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
                             0,
-                            bytemuck::cast_slice(&uniform_data),
+                            &buffer.into_inner(),
                         );
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
@@ -199,15 +221,19 @@ impl render_graph::Node for PhysarumSimulationNode {
                     if let Some(pipeline) =
                         pipeline_cache.get_compute_pipeline(pipeline.move_pipeline_id)
                     {
-                        let uniform_data = [
-                            constants::WIDTH,
-                            constants::HEIGHT,
-                            constants::PIXEL_SCALE_FACTOR.to_bits(),
-                        ];
+                        let uniform_data = UniformData {
+                            width: constants::WIDTH,
+                            height: constants::HEIGHT,
+                            value: constants::PIXEL_SCALE_FACTOR,
+                            color_mode: constants::COLOR_MODE,
+                        };
+                        let mut buffer = encase::UniformBuffer::new(Vec::new());
+                        buffer.write(&uniform_data).unwrap();
+
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
                             0,
-                            bytemuck::cast_slice(&uniform_data),
+                            &buffer.into_inner(),
                         );
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
@@ -232,15 +258,19 @@ impl render_graph::Node for PhysarumSimulationNode {
                     if let Some(pipeline) =
                         pipeline_cache.get_compute_pipeline(pipeline.diffusion_pipeline_id)
                     {
-                        let uniform_data = [
-                            constants::WIDTH,
-                            constants::HEIGHT,
-                            constants::DECAY_FACTOR.to_bits(),
-                        ];
+                        let uniform_data = UniformData {
+                            width: constants::WIDTH,
+                            height: constants::HEIGHT,
+                            value: constants::DECAY_FACTOR,
+                            color_mode: constants::COLOR_MODE,
+                        };
+                        let mut buffer = encase::UniformBuffer::new(Vec::new());
+                        buffer.write(&uniform_data).unwrap();
+
                         queue.write_buffer(
                             &physarum_buffers.uniform_buffer,
                             0,
-                            bytemuck::cast_slice(&uniform_data),
+                            &buffer.into_inner(),
                         );
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, diffusion_bind_group, &[]);

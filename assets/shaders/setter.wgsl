@@ -2,6 +2,7 @@ struct Uniforms {
     width: u32,
     height: u32,
     value: f32,
+    colorMode: u32
 };
 
 // Uniforms are grouped in a struct.

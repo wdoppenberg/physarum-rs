@@ -1,13 +1,14 @@
 use bevy::prelude::{default, Commands, Res, ResMut, Sprite, Transform};
 use bevy::asset::{AssetServer, Assets, RenderAssetUsages};
 use bevy::image::Image;
-use bevy::render::render_resource::{AddressMode, BindGroupEntry, BindingResource, BindingType, BufferBinding, BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages, Extent3d, FilterMode, PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor, StorageTextureAccess, TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDimension};
+use bevy::render::render_resource::{encase, AddressMode, BindGroupEntry, BindingResource, BindingType, BufferBinding, BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages, Extent3d, FilterMode, PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor, StorageTextureAccess, TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDimension};
 use bevy::camera::Camera2d;
 use bevy::math::{Vec2, Vec3};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::texture::GpuImage;
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::log::info;
+use crate::simulation::buffers::UniformData;
 use crate::simulation::constants;
 use crate::simulation::render::create_compute_pipeline_id;
 use crate::simulation::resources::main::PhysarumInputState;
@@ -220,24 +221,26 @@ pub fn init_physarum_pipeline(
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
     });
 
-
-
     // Create uniform buffer for simulation parameters
     let uniform_buffer = render_device.create_buffer(&BufferDescriptor {
         label: Some("Uniform Buffer"),
-        size: size_of::<[u32; 3]>() as u64, // width, height, decay/deposit factor
+        size: size_of::<[u32; 4]>() as u64, // width, height, decay/deposit factor, color mode
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
 
     // Write initial data to uniform buffer
     // Make sure all values are consistently u32 to match shader expectations
-    let uniform_data = [
-        constants::WIDTH,
-        constants::HEIGHT,
-        constants::DECAY_FACTOR.to_bits(),
-    ];
-    render_queue.write_buffer(&uniform_buffer, 0, bytemuck::cast_slice(&uniform_data));
+    let uniform_data = UniformData {
+        width: constants::WIDTH,
+        height: constants::HEIGHT,
+        value: constants::DECAY_FACTOR,
+        color_mode: constants::COLOR_MODE,
+    };
+    let mut buffer = encase::UniformBuffer::new(Vec::new());
+    buffer.write(&uniform_data).unwrap();
+
+    render_queue.write_buffer(&uniform_buffer, 0, &buffer.into_inner());
 
     let counter_buffer = render_device.create_buffer(&BufferDescriptor {
         label: Some("Counter Buffer"),
@@ -374,8 +377,9 @@ pub fn update_simulation_params(
     mut simulation_settings: ResMut<PhysarumSimulationSettings>,
 ) {
     if input_state.settings_changed {
+        // Use the current settings provided by the main world UI/input state
         simulation_settings.index = input_state.new_index;
-        simulation_settings.point_settings = load_parameters(simulation_settings.index);
+        simulation_settings.point_settings = input_state.current_settings;
 
         let params_bytes = bytemuck::bytes_of(&simulation_settings.point_settings);
         render_queue.write_buffer(&buffers.params_buffer, 0, params_bytes);

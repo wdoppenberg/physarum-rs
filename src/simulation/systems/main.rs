@@ -2,6 +2,7 @@ use bevy::prelude::{KeyCode, Res, ResMut};
 use bevy::input::ButtonInput;
 use bevy::log::info;
 use crate::simulation::resources::main::PhysarumInputState;
+use crate::simulation::utils::load_parameters;
 
 /// Handle keyboard input to change simulation parameters (main world)
 pub fn handle_input(
@@ -26,5 +27,6 @@ pub fn handle_input(
         info!("Simulation settings changed to {}", new_index);
         input_state.settings_changed = true;
         input_state.new_index = new_index;
+        input_state.current_settings = load_parameters(new_index);
     }
 }

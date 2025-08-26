@@ -9,6 +9,8 @@ pub const DEPOSIT_FACTOR: f32 = 1.0;
 pub const NUMBER_OF_BASE_POINTS: usize = 24;
 pub const PARAMS_DIMENSION: usize = 15;
 
+pub const COLOR_MODE: u32 = 2;
+
 // The matrix data has been converted from `double` to `f32` for better GPU compatibility.
 // Simulation parameters using the data in mxsage's 36 Points.
 pub const PARAMETERS_MATRIX: [[f32; PARAMS_DIMENSION]; NUMBER_OF_BASE_POINTS] = [
