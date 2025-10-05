@@ -1,7 +1,9 @@
 use crate::simulation::render::{PhysarumSimulationLabel, PhysarumSimulationNode};
 use crate::simulation::resources::main::PhysarumInputState;
 use crate::simulation::resources::render::PhysarumImages;
+use crate::simulation::resources::ui::UiState;
 use crate::simulation::systems::main::handle_input;
+use crate::simulation::systems::ui::sidebar_ui;
 use crate::simulation::systems::render::{
     init_physarum_pipeline, prepare_bind_groups, update_simulation_params,
 };
@@ -25,6 +27,9 @@ impl Plugin for PhysarumPlugin {
 
         // Initialize the input state resource
         app.init_resource::<PhysarumInputState>();
+        
+        // Initialize the UI state resource
+        app.init_resource::<UiState>();
 
         // Register the pipeline status resource
         let render_app = app.sub_app_mut(RenderApp);
@@ -47,6 +52,6 @@ impl Plugin for PhysarumPlugin {
             bevy::render::graph::CameraDriverLabel,
         );
 
-        app.add_systems(Update, handle_input);
+        app.add_systems(Update, (handle_input, sidebar_ui));
     }
 }
