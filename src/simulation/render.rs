@@ -6,6 +6,7 @@ use bevy::render::render_graph::{self, RenderLabel};
 use bevy::render::render_resource::*;
 use bevy::render::renderer::{RenderContext, RenderQueue};
 use bevy::log::{debug, info};
+use crate::simulation::resources::main::PhysarumInputState;
 
 /// Create a compute pipeline ID and queue it for creation
 pub fn create_compute_pipeline_id(
@@ -120,7 +121,7 @@ impl render_graph::Node for PhysarumSimulationNode {
         let [bind_group_a, bind_group_b] = &world.resource::<PhysarumBindGroups>().0;
         let physarum_buffers = world.resource::<PhysarumBuffers>();
         let queue = world.resource::<RenderQueue>();
-        let input = world.resource::<crate::simulation::resources::main::PhysarumInputState>();
+        let input = world.resource::<PhysarumInputState>();
                 let config = world.resource::<PhysarumConfig>();
 
         match &self.state {

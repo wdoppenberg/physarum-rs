@@ -73,9 +73,6 @@ pub fn handle_input(
     if keys.just_pressed(KeyCode::KeyF) {
         input_state.spawn_particles = 1; // circular spawn around action
     }
-    if keys.just_pressed(KeyCode::KeyD) {
-        input_state.spawn_particles = 2; // multiple spots (shader currently handles >=1 same)
-    }
     // Let the spawn flag last only one frame (handled here by clearing if no key press this frame)
     if !(keys.just_pressed(KeyCode::KeyF) || keys.just_pressed(KeyCode::KeyD)) {
         input_state.spawn_particles = 0;
@@ -89,8 +86,8 @@ pub fn handle_input(
         input_state.action_area_size_sigma = (input_state.action_area_size_sigma - 0.001).clamp(0.01, 1.5);
     }
 
-    // Cycle color modes with P / H / A
-    if keys.just_pressed(KeyCode::KeyP) || keys.just_pressed(KeyCode::KeyH) || keys.just_pressed(KeyCode::KeyA) {
+    // Cycle color modes with P
+    if keys.just_pressed(KeyCode::KeyP) {
         input_state.color_mode = (input_state.color_mode + 1) % 10; // cycle through first 10 modes
     }
 }
