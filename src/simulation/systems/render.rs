@@ -8,6 +8,7 @@ use bevy::render::render_asset::RenderAssets;
 use bevy::render::texture::GpuImage;
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::log::info;
+
 use crate::simulation::buffers::UniformData;
 use crate::simulation::constants;
 use crate::simulation::render::create_compute_pipeline_id;

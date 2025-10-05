@@ -4,9 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { git = "https://github.com/bevyengine/bevy.git", rev = "4b1b70d50", features = ["dynamic_linking", "bevy_render", "bevy_ui"] }
+bevy = { version = "0.17.2", default-features = false, features = ["bevy_render", "bevy_core_pipeline", "bevy_sprite", "bevy_log", "bevy_input_focus", "bevy_shader", "bevy_winit", "x11", "bevy_ui_render"] }
 rand = "0.9.2"
 bytemuck = { version = "1.23.1", features = ["derive"] }
 
 [profile.dev.package]
 bevy = { opt-level = 3 }
+
+[workspace.metadata.cross.target.aarch64-unknown-linux-gnu]
+# Install libssl-dev:arm64, see <https://github.com/cross-rs/cross/blob/main/docs/custom_images.md#adding-dependencies-to-existing-images>
+pre-build = [
+    "apt-get update && apt-get --assume-yes install binutils-aarch64-linux-gnu libwayland-dev"
+]

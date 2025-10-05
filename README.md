@@ -1,6 +1,6 @@
 # Physarum with Bevy
 
-A Bevy + WebGPU port of https://github.com/Bleuje/physarum-36p. 
+A Bevy + WebGPU port of https://github.com/Bleuje/physarum-36p and https://github.com/Bleuje/interactive-physarum. 
 
 To run, use
 

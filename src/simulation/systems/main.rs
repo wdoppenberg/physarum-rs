@@ -19,12 +19,15 @@ pub fn handle_input(
     // 2) Mouse position to action coordinates
     if let Ok(win) = q_windows.single() {
         if let Some(pos) = win.cursor_position() {
-            // Scale window coordinates to simulation coordinates
-            let sim_width = win.resolution.width();
-            let sim_height = win.resolution.height();
+            // Map window cursor coordinates proportionally into simulation texture coordinates
+            // Simulation operates on a fixed-size texture (constants::WIDTH/HEIGHT), so we must scale to that space.
+            let sim_width = crate::simulation::constants::WIDTH as f32;
+            let sim_height = crate::simulation::constants::HEIGHT as f32;
 
+            // Cursor position is in window space [0..win.width/height]. Scale to [0..sim_width/height].
+            // Flip Y to match texture coordinate space (y increasing downward in the simulation textures).
             let x = (pos.x / win.width() * sim_width).clamp(0.0, sim_width - 1.0);
-            let y = ((1.0 - pos.y / win.height()) * sim_height).clamp(0.0, sim_height - 1.0);
+            let y = (pos.y / win.height() * sim_height).clamp(0.0, sim_height - 1.0);
 
             input_state.action_x = x;
             input_state.action_y = y;

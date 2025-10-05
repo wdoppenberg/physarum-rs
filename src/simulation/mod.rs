@@ -1,4 +1,3 @@
-pub mod components;
 pub mod render;
 pub mod resources;
 pub mod systems;
@@ -7,4 +6,3 @@ pub mod plugin;
 pub mod constants;
 mod buffers;
 mod color;
-mod compute_pass;

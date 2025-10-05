@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy::render::render_graph::{self, RenderLabel};
 use bevy::render::render_resource::*;
 use bevy::render::renderer::{RenderContext, RenderQueue};
+use bevy::log::{debug, info};
 
 /// Create a compute pipeline ID and queue it for creation
 pub fn create_compute_pipeline_id(
