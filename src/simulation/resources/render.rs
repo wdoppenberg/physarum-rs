@@ -1,8 +1,10 @@
-use bevy::prelude::Resource;
-use bevy::render::render_resource::{BindGroup, BindGroupLayout, Buffer, CachedComputePipelineId, Sampler};
-use bevy::render::extract_resource::ExtractResource;
 use bevy::asset::Handle;
 use bevy::image::Image;
+use bevy::prelude::Resource;
+use bevy::render::extract_resource::ExtractResource;
+use bevy::render::render_resource::{
+    BindGroup, BindGroupLayout, Buffer, CachedComputePipelineId, Sampler,
+};
 
 /// Settings for the simulation points
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -40,7 +42,7 @@ pub struct PhysarumBuffers {
 pub struct PhysarumImages {
     pub(crate) texture_a: Handle<Image>,
     pub(crate) texture_b: Handle<Image>,
-    pub(crate) display_texture: Handle<Image>
+    pub(crate) display_texture: Handle<Image>,
 }
 
 #[derive(Resource)]
@@ -58,5 +60,5 @@ pub struct PhysarumBindGroups(pub [BindGroup; 2]);
 #[derive(Resource)]
 pub struct PhysarumSimulationSettings {
     pub(crate) index: usize,
-    pub(crate) point_settings: PointSettings
+    pub(crate) point_settings: PointSettings,
 }

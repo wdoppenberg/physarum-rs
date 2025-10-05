@@ -1,5 +1,4 @@
-pub mod render;
-pub mod main;
 pub mod config;
+pub mod input;
+pub mod render;
 pub mod ui;
-

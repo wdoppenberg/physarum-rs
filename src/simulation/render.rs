@@ -1,12 +1,12 @@
 use crate::simulation::buffers::UniformData;
 use crate::simulation::resources::config::PhysarumConfig;
+use crate::simulation::resources::input::PhysarumInputState;
 use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
+use bevy::log::{debug, info};
 use bevy::prelude::*;
 use bevy::render::render_graph::{self, RenderLabel};
 use bevy::render::render_resource::*;
 use bevy::render::renderer::{RenderContext, RenderQueue};
-use bevy::log::{debug, info};
-use crate::simulation::resources::main::PhysarumInputState;
 
 /// Create a compute pipeline ID and queue it for creation
 pub fn create_compute_pipeline_id(
@@ -122,7 +122,7 @@ impl render_graph::Node for PhysarumSimulationNode {
         let physarum_buffers = world.resource::<PhysarumBuffers>();
         let queue = world.resource::<RenderQueue>();
         let input = world.resource::<PhysarumInputState>();
-                let config = world.resource::<PhysarumConfig>();
+        let config = world.resource::<PhysarumConfig>();
 
         match &self.state {
             PhysarumSimulationState::Loading => {}
@@ -138,10 +138,10 @@ impl render_graph::Node for PhysarumSimulationNode {
                         width: config.width,
                         height: config.height,
                         value: config.deposit_factor,
-                        color_mode: input.color_mode,
+                        color_mode: config.color_mode,
                         num_particles: config.num_particles,
                         time: input.time,
-                        action_area_size_sigma: input.action_area_size_sigma,
+                        action_area_size_sigma: config.action_area_size_sigma,
                         action_x: input.action_x,
                         action_y: input.action_y,
                         move_bias_action_x: input.move_bias_action_x,
@@ -185,10 +185,10 @@ impl render_graph::Node for PhysarumSimulationNode {
                             width: config.width,
                             height: config.height,
                             value: config.deposit_factor,
-                            color_mode: input.color_mode,
+                            color_mode: config.color_mode,
                             num_particles: config.num_particles,
                             time: input.time,
-                            action_area_size_sigma: input.action_area_size_sigma,
+                            action_area_size_sigma: config.action_area_size_sigma,
                             action_x: input.action_x,
                             action_y: input.action_y,
                             move_bias_action_x: input.move_bias_action_x,
@@ -224,10 +224,10 @@ impl render_graph::Node for PhysarumSimulationNode {
                             width: config.width,
                             height: config.height,
                             value: 0.,
-                            color_mode: input.color_mode,
+                            color_mode: config.color_mode,
                             num_particles: config.num_particles,
                             time: input.time,
-                            action_area_size_sigma: input.action_area_size_sigma,
+                            action_area_size_sigma: config.action_area_size_sigma,
                             action_x: input.action_x,
                             action_y: input.action_y,
                             move_bias_action_x: input.move_bias_action_x,
@@ -262,10 +262,10 @@ impl render_graph::Node for PhysarumSimulationNode {
                             width: config.width,
                             height: config.height,
                             value: config.pixel_scale_factor,
-                            color_mode: input.color_mode,
+                            color_mode: config.color_mode,
                             num_particles: config.num_particles,
                             time: input.time,
-                            action_area_size_sigma: input.action_area_size_sigma,
+                            action_area_size_sigma: config.action_area_size_sigma,
                             action_x: input.action_x,
                             action_y: input.action_y,
                             move_bias_action_x: input.move_bias_action_x,
@@ -310,10 +310,10 @@ impl render_graph::Node for PhysarumSimulationNode {
                             width: config.width,
                             height: config.height,
                             value: config.decay_factor,
-                            color_mode: input.color_mode,
+                            color_mode: config.color_mode,
                             num_particles: config.num_particles,
                             time: input.time,
-                            action_area_size_sigma: input.action_area_size_sigma,
+                            action_area_size_sigma: config.action_area_size_sigma,
                             action_x: input.action_x,
                             action_y: input.action_y,
                             move_bias_action_x: input.move_bias_action_x,

@@ -1,22 +1,34 @@
-use bevy::prelude::{default, Commands, Res, ResMut, Sprite, Transform};
 use bevy::asset::{AssetServer, Assets, RenderAssetUsages};
-use bevy::image::Image;
-use bevy::render::render_resource::{encase, AddressMode, BindGroupEntry, BindingResource, BindingType, BufferBinding, BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages, Extent3d, FilterMode, PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor, StorageTextureAccess, TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDimension};
 use bevy::camera::Camera2d;
-use bevy::math::{Vec2, Vec3};
-use bevy::render::render_asset::RenderAssets;
-use bevy::render::texture::GpuImage;
-use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::image::Image;
 use bevy::log::info;
+use bevy::math::{Vec2, Vec3};
+use bevy::prelude::{default, Commands, Res, ResMut, Sprite, Transform};
+use bevy::render::render_asset::RenderAssets;
+use bevy::render::render_resource::{
+    encase, AddressMode, BindGroupEntry, BindingResource, BindingType, BufferBinding,
+    BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages, Extent3d, FilterMode,
+    PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor, StorageTextureAccess,
+    TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView,
+    TextureViewDimension,
+};
+use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::render::texture::GpuImage;
 
 use crate::simulation::buffers::UniformData;
 use crate::simulation::render::create_compute_pipeline_id;
 use crate::simulation::resources::config::PhysarumConfig;
-use crate::simulation::resources::main::PhysarumInputState;
-use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler, PhysarumSimulationSettings};
+use crate::simulation::resources::render::{
+    PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler,
+    PhysarumSimulationSettings,
+};
 use crate::simulation::utils::{binding_entry, create_particles_buffer, load_parameters};
 
-pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, config: Res<PhysarumConfig>) {
+pub fn render_setup(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    config: Res<PhysarumConfig>,
+) {
     let (width, height) = (config.width, config.height);
 
     let mut display_image = Image::new_fill(
@@ -62,10 +74,7 @@ pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, c
     commands.spawn((
         Sprite {
             image: display_texture.clone(),
-            custom_size: Some(Vec2::new(
-                config.width as f32,
-                config.height as f32,
-            )),
+            custom_size: Some(Vec2::new(config.width as f32, config.height as f32)),
             ..default()
         },
         Transform::from_scale(Vec3::splat(config.display_factor as f32)),
@@ -214,7 +223,7 @@ pub fn init_physarum_pipeline(
 
     commands.insert_resource(PhysarumSimulationSettings {
         index,
-        point_settings
+        point_settings,
     });
 
     // Provide two point settings (pen/background). For now, duplicate the same settings.
@@ -386,21 +395,24 @@ pub fn init_physarum_pipeline(
 
 /// Update simulation parameters in the render world
 pub fn update_simulation_params(
-    mut input_state: ResMut<PhysarumInputState>,
+    mut config: ResMut<PhysarumConfig>,
     buffers: Res<PhysarumBuffers>,
     render_queue: Res<RenderQueue>,
     mut simulation_settings: ResMut<PhysarumSimulationSettings>,
 ) {
-    if input_state.settings_changed {
+    if config.settings_changed {
         // Use the current settings provided by the main world UI/input state
-        simulation_settings.index = input_state.new_index;
-        simulation_settings.point_settings = input_state.current_settings;
+        simulation_settings.index = config.new_index;
+        simulation_settings.point_settings = config.current_settings;
 
-        let params_pair = [simulation_settings.point_settings, simulation_settings.point_settings];
+        let params_pair = [
+            simulation_settings.point_settings,
+            simulation_settings.point_settings,
+        ];
         let params_bytes = bytemuck::cast_slice(&params_pair);
         render_queue.write_buffer(&buffers.params_buffer, 0, params_bytes);
 
         // Reset the flag
-        input_state.settings_changed = false;
+        config.settings_changed = false;
     }
 }

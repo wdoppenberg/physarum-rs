@@ -1,8 +1,53 @@
-use bevy::prelude::*;
-use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
-use bevy_egui::{EguiContexts, egui};
-use crate::simulation::resources::ui::UiState;
 use crate::simulation::resources::config::PhysarumConfig;
+use crate::simulation::resources::ui::UiState;
+use crate::simulation::utils::load_parameters;
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
+use bevy::prelude::*;
+use bevy_egui::{egui, EguiContexts};
+
+/// Color mode names matching the shader implementations
+const COLOR_MODES: &[(&str, u32)] = &[
+    ("Rainbow HSV", 0),
+    ("Psychedelic Fire", 1),
+    ("Electric Ice", 2),
+    ("Neon Inferno", 3),
+    ("Gold over Blue", 4),
+    ("Cosmic Palette", 5),
+    ("Purple Dreams", 6),
+    ("Neon Arctic", 7),
+    ("Yellow-Green Plasma", 8),
+    ("Bioluminescent Green", 9),
+    ("Rainbow Waves", 10),
+    ("Teal Sunset", 11),
+];
+
+/// Simulation mode names from PARAMETERS_MATRIX
+const SIMULATION_MODES: &[(&str, usize)] = &[
+    ("Pure Multiscale", 0),
+    ("Hex Hole Open", 1),
+    ("Vertebrata", 2),
+    ("Star Network", 3),
+    ("Enmeshed Singularities", 4),
+    ("Waves Upturn", 5),
+    ("More Individuals", 6),
+    ("Sloppy Bucky", 7),
+    ("Massive Structure", 8),
+    ("Speed Modulation", 9),
+    ("Transmission Tower", 10),
+    ("Ink on White", 11),
+    ("Vanishing Points", 12),
+    ("Scaling Nodule Emergence", 13),
+    ("Hyp Offset", 14),
+    ("Strike", 15),
+    ("Clear Spaghetti", 16),
+    ("Bleuje 1", 17),
+    ("Bleuje 2", 18),
+    ("Bleuje 3", 19),
+    ("Bleuje 4", 20),
+    ("Bleuje 5", 21),
+    ("Bleuje 6", 22),
+    ("Bleuje 7", 23),
+];
 
 /// System to handle sidebar UI
 pub fn sidebar_ui(
@@ -51,26 +96,65 @@ pub fn sidebar_ui(
             ui.separator();
 
             ui.label("Display Settings:");
-            ui.add(egui::Slider::new(&mut config.display_factor, 1..=10)
-                .text("Display Factor"));
-            ui.add(egui::Slider::new(&mut config.pixel_scale_factor, 0.1..=5.0)
-                .text("Pixel Scale"));
+            ui.add(egui::Slider::new(&mut config.display_factor, 1..=10).text("Display Factor"));
+            ui.add(
+                egui::Slider::new(&mut config.pixel_scale_factor, 0.1..=5.0).text("Pixel Scale"),
+            );
 
             ui.separator();
             ui.label("Simulation Settings:");
-            
-            ui.add(egui::Slider::new(&mut config.decay_factor, 0.0..=1.0)
-                .text("Decay Factor"));
-            ui.add(egui::Slider::new(&mut config.deposit_factor, 0.0..=10.0)
-                .text("Deposit Factor"));
+
+            ui.add(egui::Slider::new(&mut config.decay_factor, 0.0..=1.0).text("Decay Factor"));
+            ui.add(
+                egui::Slider::new(&mut config.deposit_factor, 0.0..=10.0).text("Deposit Factor"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.action_area_size_sigma, 0.0..=1.0)
+                    .text("Action Area Size"),
+            );
 
             ui.separator();
             ui.label("Color Mode:");
-            ui.horizontal(|ui| {
-                ui.radio_value(&mut config.color_mode, 0, "Mode 0");
-                ui.radio_value(&mut config.color_mode, 1, "Mode 1");
-                ui.radio_value(&mut config.color_mode, 2, "Mode 2");
-            });
+
+            // Find current color mode name
+            let current_color_name = COLOR_MODES
+                .iter()
+                .find(|(_, mode)| *mode == config.color_mode)
+                .map(|(name, _)| *name)
+                .unwrap_or("Unknown");
+
+            egui::ComboBox::from_label("Color Scheme")
+                .selected_text(current_color_name)
+                .show_ui(ui, |ui| {
+                    for (name, mode) in COLOR_MODES {
+                        ui.selectable_value(&mut config.color_mode, *mode, *name);
+                    }
+                });
+
+            ui.separator();
+            ui.label("Simulation Mode:");
+
+            // Find current simulation mode name
+            let current_sim_name = SIMULATION_MODES
+                .iter()
+                .find(|(_, idx)| *idx == config.new_index)
+                .map(|(name, _)| *name)
+                .unwrap_or("Unknown");
+
+            egui::ComboBox::from_label("Behavior Pattern")
+                .selected_text(current_sim_name)
+                .show_ui(ui, |ui| {
+                    for (name, idx) in SIMULATION_MODES {
+                        if ui
+                            .selectable_value(&mut config.new_index, *idx, *name)
+                            .changed()
+                        {
+                            // Update the settings when simulation mode changes
+                            config.current_settings = load_parameters(config.new_index);
+                            config.settings_changed = true;
+                        }
+                    }
+                });
 
             ui.separator();
             ui.label(format!("Particles: {}", config.num_particles));

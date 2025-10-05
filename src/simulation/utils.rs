@@ -40,7 +40,7 @@ pub fn create_particles_buffer(render_device: &RenderDevice, num_particles: u32)
 pub fn load_parameters(index: usize) -> PointSettings {
     let index = index % PARAMETERS_MATRIX.len();
     let params = PARAMETERS_MATRIX[index];
-    
+
     PointSettings {
         default_scaling_factor: 1.0,
         sensor_distance0: params[0],

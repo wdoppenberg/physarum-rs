@@ -1,11 +1,11 @@
-use bevy::prelude::{KeyCode, Res, ResMut, Query, With, Vec2, Time};
+use crate::simulation::constants::PARAMETERS_MATRIX;
+use crate::simulation::resources::config::PhysarumConfig;
+use crate::simulation::resources::input::PhysarumInputState;
+use crate::simulation::utils::load_parameters;
 use bevy::input::ButtonInput;
 use bevy::log::info;
+use bevy::prelude::{KeyCode, Query, Res, ResMut, Time, Vec2, With};
 use bevy::window::{PrimaryWindow, Window};
-use crate::simulation::resources::main::PhysarumInputState;
-use crate::simulation::utils::load_parameters;
-use crate::simulation::resources::config::PhysarumConfig;
-use crate::simulation::constants::PARAMETERS_MATRIX;
 
 /// Handle keyboard/mouse input to change simulation parameters and interactive uniforms (main world)
 pub fn handle_input(
@@ -13,7 +13,7 @@ pub fn handle_input(
     time: Res<Time>,
     mut input_state: ResMut<PhysarumInputState>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
-    config: Res<PhysarumConfig>,
+    mut config: ResMut<PhysarumConfig>,
 ) {
     // 1) Accumulate time
     input_state.time += time.delta_secs();
@@ -36,13 +36,16 @@ pub fn handle_input(
         }
     }
 
-
     // 3) Keyboard controls
     let mut changed_params_index = false;
-    let mut new_index = input_state.new_index;
+    let mut new_index = config.new_index;
 
     // Cycle through presets
-    if keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::KeyR) {
+    if keys.just_pressed(KeyCode::ArrowRight)
+        || keys.just_pressed(KeyCode::ArrowUp)
+        || keys.just_pressed(KeyCode::Space)
+        || keys.just_pressed(KeyCode::KeyR)
+    {
         new_index = (new_index + 1) % PARAMETERS_MATRIX.len();
         changed_params_index = true;
     }
@@ -53,18 +56,28 @@ pub fn handle_input(
 
     if changed_params_index {
         info!("Simulation settings changed to {}", new_index);
-        input_state.settings_changed = true;
-        input_state.new_index = new_index;
-        input_state.current_settings = load_parameters(new_index);
+        config.settings_changed = true;
+        config.new_index = new_index;
+        config.current_settings = load_parameters(new_index);
     }
 
     // Movement bias with WASD
     let mut bias = Vec2::ZERO;
-    if keys.pressed(KeyCode::KeyW) { bias.y += 10.0; }
-    if keys.pressed(KeyCode::KeyS) { bias.y -= 10.0; }
-    if keys.pressed(KeyCode::KeyA) { bias.x -= 10.0; }
-    if keys.pressed(KeyCode::KeyD) { bias.x += 10.0; }
-    if bias.length_squared() > 0.0 { bias = bias.normalize(); }
+    if keys.pressed(KeyCode::KeyW) {
+        bias.y += 10.0;
+    }
+    if keys.pressed(KeyCode::KeyS) {
+        bias.y -= 10.0;
+    }
+    if keys.pressed(KeyCode::KeyA) {
+        bias.x -= 10.0;
+    }
+    if keys.pressed(KeyCode::KeyD) {
+        bias.x += 10.0;
+    }
+    if bias.length_squared() > 0.0 {
+        bias = bias.normalize();
+    }
     input_state.move_bias_action_x = bias.x;
     input_state.move_bias_action_y = bias.y;
     input_state.l2_action = bias.length();
@@ -78,16 +91,8 @@ pub fn handle_input(
         input_state.spawn_particles = 0;
     }
 
-    // Adjust action area sigma with C / X
-    if keys.pressed(KeyCode::KeyC) {
-        input_state.action_area_size_sigma = (input_state.action_area_size_sigma + 0.001).clamp(0.01, 1.5);
-    }
-    if keys.pressed(KeyCode::KeyX) {
-        input_state.action_area_size_sigma = (input_state.action_area_size_sigma - 0.001).clamp(0.01, 1.5);
-    }
-
     // Cycle color modes with P
     if keys.just_pressed(KeyCode::KeyP) {
-        input_state.color_mode = (input_state.color_mode + 1) % 10; // cycle through first 10 modes
+        config.color_mode = (config.color_mode + 1) % 10; // cycle through first 10 modes
     }
 }
