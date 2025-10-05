@@ -3,15 +3,14 @@ use bevy::render::render_resource::*;
 use bevy::render::renderer::RenderDevice;
 use rand::Rng;
 
-use crate::simulation::constants;
-use crate::simulation::constants::{NUMBER_OF_BASE_POINTS, PARAMETERS_MATRIX};
+use crate::simulation::constants::PARAMETERS_MATRIX;
 use crate::simulation::resources::render::PointSettings;
 /// Create a buffer containing the initial particle positions
-pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
+pub fn create_particles_buffer(render_device: &RenderDevice, num_particles: u32) -> Buffer {
     let mut rng = rand::rng();
-    let mut initial_particle_data = Vec::with_capacity(3 * constants::NUM_PARTICLES as usize);
+    let mut initial_particle_data = Vec::with_capacity(3 * num_particles as usize);
 
-    for _ in 0..constants::NUM_PARTICLES {
+    for _ in 0..num_particles {
         // Position (packed as 2x16 unorm)
         let x = rng.random::<f32>();
         let y = rng.random::<f32>();
@@ -39,7 +38,7 @@ pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
 
 /// Load parameters from the parameters matrix
 pub fn load_parameters(index: usize) -> PointSettings {
-    let index = index % NUMBER_OF_BASE_POINTS;
+    let index = index % PARAMETERS_MATRIX.len();
     let params = PARAMETERS_MATRIX[index];
     
     PointSettings {

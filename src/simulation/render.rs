@@ -1,5 +1,5 @@
 use crate::simulation::buffers::UniformData;
-use crate::simulation::constants;
+use crate::simulation::resources::config::PhysarumConfig;
 use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
 use bevy::prelude::*;
 use bevy::render::render_graph::{self, RenderLabel};
@@ -121,6 +121,7 @@ impl render_graph::Node for PhysarumSimulationNode {
         let physarum_buffers = world.resource::<PhysarumBuffers>();
         let queue = world.resource::<RenderQueue>();
         let input = world.resource::<crate::simulation::resources::main::PhysarumInputState>();
+                let config = world.resource::<PhysarumConfig>();
 
         match &self.state {
             PhysarumSimulationState::Loading => {}
@@ -133,11 +134,11 @@ impl render_graph::Node for PhysarumSimulationNode {
                     pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
                 {
                     let uniform_data = UniformData {
-                        width: constants::WIDTH,
-                        height: constants::HEIGHT,
-                        value: constants::DEPOSIT_FACTOR,
+                        width: config.width,
+                        height: config.height,
+                        value: config.deposit_factor,
                         color_mode: input.color_mode,
-                        num_particles: constants::NUM_PARTICLES,
+                        num_particles: config.num_particles,
                         time: input.time,
                         action_area_size_sigma: input.action_area_size_sigma,
                         action_x: input.action_x,
@@ -158,8 +159,8 @@ impl render_graph::Node for PhysarumSimulationNode {
                     encoder.set_pipeline(pipeline);
                     encoder.set_bind_group(0, bind_group_a, &[]);
                     encoder.dispatch_workgroups(
-                        constants::WIDTH / constants::WORK_GROUP_SIZE,
-                        constants::HEIGHT / constants::WORK_GROUP_SIZE,
+                        config.width / config.work_group_size,
+                        config.height / config.work_group_size,
                         1,
                     );
                 }
@@ -180,11 +181,11 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pipeline_cache.get_compute_pipeline(pipeline.deposit_pipeline_id)
                     {
                         let uniform_data = UniformData {
-                            width: constants::WIDTH,
-                            height: constants::HEIGHT,
-                            value: constants::DEPOSIT_FACTOR,
+                            width: config.width,
+                            height: config.height,
+                            value: config.deposit_factor,
                             color_mode: input.color_mode,
-                            num_particles: constants::NUM_PARTICLES,
+                            num_particles: config.num_particles,
                             time: input.time,
                             action_area_size_sigma: input.action_area_size_sigma,
                             action_x: input.action_x,
@@ -208,8 +209,8 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
                         pass.dispatch_workgroups(
-                            constants::WIDTH / constants::WORK_GROUP_SIZE,
-                            constants::HEIGHT / constants::WORK_GROUP_SIZE,
+                            config.width / config.work_group_size,
+                            config.height / config.work_group_size,
                             1,
                         );
                     }
@@ -219,11 +220,11 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pipeline_cache.get_compute_pipeline(pipeline.setter_pipeline_id)
                     {
                         let uniform_data = UniformData {
-                            width: constants::WIDTH,
-                            height: constants::HEIGHT,
+                            width: config.width,
+                            height: config.height,
                             value: 0.,
                             color_mode: input.color_mode,
-                            num_particles: constants::NUM_PARTICLES,
+                            num_particles: config.num_particles,
                             time: input.time,
                             action_area_size_sigma: input.action_area_size_sigma,
                             action_x: input.action_x,
@@ -246,8 +247,8 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, deposit_bind_group, &[]);
                         pass.dispatch_workgroups(
-                            constants::WIDTH / constants::WORK_GROUP_SIZE,
-                            constants::HEIGHT / constants::WORK_GROUP_SIZE,
+                            config.width / config.work_group_size,
+                            config.height / config.work_group_size,
                             1,
                         );
                     }
@@ -257,11 +258,11 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pipeline_cache.get_compute_pipeline(pipeline.move_pipeline_id)
                     {
                         let uniform_data = UniformData {
-                            width: constants::WIDTH,
-                            height: constants::HEIGHT,
-                            value: constants::PIXEL_SCALE_FACTOR,
+                            width: config.width,
+                            height: config.height,
+                            value: config.pixel_scale_factor,
                             color_mode: input.color_mode,
-                            num_particles: constants::NUM_PARTICLES,
+                            num_particles: config.num_particles,
                             time: input.time,
                             action_area_size_sigma: input.action_area_size_sigma,
                             action_x: input.action_x,
@@ -285,7 +286,7 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_bind_group(0, deposit_bind_group, &[]);
 
                         // Calculate 2D dispatch to avoid exceeding 65535 limit
-                        let total_groups = constants::NUM_PARTICLES.div_ceil(128);
+                        let total_groups = config.num_particles.div_ceil(128);
                         const MAX_GROUPS_PER_DIM: u32 = 65535;
 
                         let dispatch_x = std::cmp::min(total_groups, MAX_GROUPS_PER_DIM);
@@ -305,11 +306,11 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pipeline_cache.get_compute_pipeline(pipeline.diffusion_pipeline_id)
                     {
                         let uniform_data = UniformData {
-                            width: constants::WIDTH,
-                            height: constants::HEIGHT,
-                            value: constants::DECAY_FACTOR,
+                            width: config.width,
+                            height: config.height,
+                            value: config.decay_factor,
                             color_mode: input.color_mode,
-                            num_particles: constants::NUM_PARTICLES,
+                            num_particles: config.num_particles,
                             time: input.time,
                             action_area_size_sigma: input.action_area_size_sigma,
                             action_x: input.action_x,
@@ -332,8 +333,8 @@ impl render_graph::Node for PhysarumSimulationNode {
                         pass.set_pipeline(pipeline);
                         pass.set_bind_group(0, diffusion_bind_group, &[]);
                         pass.dispatch_workgroups(
-                            constants::WIDTH / constants::WORK_GROUP_SIZE,
-                            constants::HEIGHT / constants::WORK_GROUP_SIZE,
+                            config.width / config.work_group_size,
+                            config.height / config.work_group_size,
                             1,
                         );
                     }

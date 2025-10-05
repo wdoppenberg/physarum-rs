@@ -1,19 +1,12 @@
-pub const WIDTH: u32 = 3024;
-pub const HEIGHT: u32 = 1964;
-pub const DISPLAY_FACTOR: u32 = 1;
-pub const NUM_PARTICLES: u32 = 25_000_000;
-pub const WORK_GROUP_SIZE: u32 = 32;
-pub const DECAY_FACTOR: f32 = 0.99;
-pub const PIXEL_SCALE_FACTOR: f32 = 1.;
-pub const DEPOSIT_FACTOR: f32 = 1.0;
-pub const NUMBER_OF_BASE_POINTS: usize = 24;
-pub const PARAMS_DIMENSION: usize = 15;
+// NOTE: Most compile-time constants were removed in favor of runtime-configurable settings.
+// See resources/config.rs (PhysarumConfig) for values such as width/height, particle counts, etc.
 
-pub const COLOR_MODE: u32 = 2;
+pub const PARAMS_DIMENSION: usize = 15;
 
 // The matrix data has been converted from `double` to `f32` for better GPU compatibility.
 // Simulation parameters using the data in mxsage's 36 Points.
-pub const PARAMETERS_MATRIX: [[f32; PARAMS_DIMENSION]; NUMBER_OF_BASE_POINTS] = [
+// The number of base points can be derived at runtime using PARAMETERS_MATRIX.len().
+pub const PARAMETERS_MATRIX: &[[f32; PARAMS_DIMENSION]] = &[
     // SD0    SDE      SDA      SA0    SAE     SAA     RA0    RAE      RAA     MD0     MDE     MDA     SB1     SB2      SF
     [0.000, 4.000, 0.300, 0.100, 51.32, 20.00, 0.410, 4.000, 0.000, 0.100, 6.000, 0.100, 0.000, 0.000, 22.0], // "pure_multiscale"
     [0.000, 28.04, 14.53, 0.090, 0.000, 0.000, 0.010, 1.400, 1.120, 0.830, 0.000, 0.000, 0.570, 0.030, 36.0], // "hex_hole_open"

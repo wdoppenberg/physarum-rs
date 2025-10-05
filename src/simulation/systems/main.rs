@@ -4,7 +4,8 @@ use bevy::log::info;
 use bevy::window::{PrimaryWindow, Window};
 use crate::simulation::resources::main::PhysarumInputState;
 use crate::simulation::utils::load_parameters;
-use crate::simulation::constants;
+use crate::simulation::resources::config::PhysarumConfig;
+use crate::simulation::constants::PARAMETERS_MATRIX;
 
 /// Handle keyboard/mouse input to change simulation parameters and interactive uniforms (main world)
 pub fn handle_input(
@@ -12,6 +13,7 @@ pub fn handle_input(
     time: Res<Time>,
     mut input_state: ResMut<PhysarumInputState>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
+    config: Res<PhysarumConfig>,
 ) {
     // 1) Accumulate time
     input_state.time += time.delta_secs();
@@ -20,9 +22,9 @@ pub fn handle_input(
     if let Ok(win) = q_windows.single() {
         if let Some(pos) = win.cursor_position() {
             // Map window cursor coordinates proportionally into simulation texture coordinates
-            // Simulation operates on a fixed-size texture (constants::WIDTH/HEIGHT), so we must scale to that space.
-            let sim_width = crate::simulation::constants::WIDTH as f32;
-            let sim_height = crate::simulation::constants::HEIGHT as f32;
+            // Use current config width/height to scale into simulation texture space.
+            let sim_width = config.width as f32;
+            let sim_height = config.height as f32;
 
             // Cursor position is in window space [0..win.width/height]. Scale to [0..sim_width/height].
             // Flip Y to match texture coordinate space (y increasing downward in the simulation textures).
@@ -41,11 +43,11 @@ pub fn handle_input(
 
     // Cycle through presets
     if keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::ArrowUp) || keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::KeyR) {
-        new_index = (new_index + 1) % constants::NUMBER_OF_BASE_POINTS;
+        new_index = (new_index + 1) % PARAMETERS_MATRIX.len();
         changed_params_index = true;
     }
     if keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::ArrowDown) {
-        new_index = (new_index + constants::NUMBER_OF_BASE_POINTS - 1) % constants::NUMBER_OF_BASE_POINTS;
+        new_index = (new_index + PARAMETERS_MATRIX.len() - 1) % PARAMETERS_MATRIX.len();
         changed_params_index = true;
     }
 

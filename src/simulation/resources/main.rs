@@ -44,7 +44,7 @@ impl Default for PhysarumInputState {
             spawn_particles: 0,
             spawn_fraction: 0.15,
             random_spawn_number: 0,
-            color_mode: crate::simulation::constants::COLOR_MODE,
+            color_mode: 0,
         }
     }
 }

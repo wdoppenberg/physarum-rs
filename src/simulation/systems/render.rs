@@ -10,14 +10,14 @@ use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::log::info;
 
 use crate::simulation::buffers::UniformData;
-use crate::simulation::constants;
 use crate::simulation::render::create_compute_pipeline_id;
+use crate::simulation::resources::config::PhysarumConfig;
 use crate::simulation::resources::main::PhysarumInputState;
 use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler, PhysarumSimulationSettings};
 use crate::simulation::utils::{binding_entry, create_particles_buffer, load_parameters};
 
-pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let (width, height) = (constants::WIDTH, constants::HEIGHT);
+pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, config: Res<PhysarumConfig>) {
+    let (width, height) = (config.width, config.height);
 
     let mut display_image = Image::new_fill(
         Extent3d {
@@ -63,12 +63,12 @@ pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Sprite {
             image: display_texture.clone(),
             custom_size: Some(Vec2::new(
-                constants::WIDTH as f32,
-                constants::HEIGHT as f32,
+                config.width as f32,
+                config.height as f32,
             )),
             ..default()
         },
-        Transform::from_scale(Vec3::splat(constants::DISPLAY_FACTOR as f32)),
+        Transform::from_scale(Vec3::splat(config.display_factor as f32)),
     ));
 }
 
@@ -189,6 +189,7 @@ pub fn init_physarum_pipeline(
     render_queue: Res<RenderQueue>,
     mut pipeline_cache: ResMut<PipelineCache>,
     asset_server: Res<AssetServer>,
+    config: Res<PhysarumConfig>,
 ) {
     // Create a sampler for texture reads
     let sampler = render_device.create_sampler(&SamplerDescriptor {
@@ -205,7 +206,7 @@ pub fn init_physarum_pipeline(
     commands.insert_resource(PhysarumSampler(sampler));
 
     // Create the initial buffers
-    let particles_buffer = create_particles_buffer(&render_device);
+    let particles_buffer = create_particles_buffer(&render_device, config.num_particles);
 
     // Simulation parameters (start at 0)
     let index = 0;
@@ -235,11 +236,11 @@ pub fn init_physarum_pipeline(
     // Write initial data to uniform buffer
     // Make sure all values are consistently u32 to match shader expectations
     let uniform_data = UniformData {
-        width: constants::WIDTH,
-        height: constants::HEIGHT,
-        value: constants::DECAY_FACTOR,
-        color_mode: constants::COLOR_MODE,
-        num_particles: constants::NUM_PARTICLES,
+        width: config.width,
+        height: config.height,
+        value: config.decay_factor,
+        color_mode: config.color_mode,
+        num_particles: config.num_particles,
         time: 0.0,
         action_area_size_sigma: 0.0,
         action_x: 0.0,
@@ -258,7 +259,7 @@ pub fn init_physarum_pipeline(
 
     let counter_buffer = render_device.create_buffer(&BufferDescriptor {
         label: Some("Counter Buffer"),
-        size: (constants::WIDTH * constants::HEIGHT * 4) as u64, // 4 bytes per u32
+        size: (config.width * config.height * 4) as u64, // 4 bytes per u32
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });

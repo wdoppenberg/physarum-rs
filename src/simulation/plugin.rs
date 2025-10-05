@@ -10,6 +10,7 @@ use bevy::prelude::{IntoScheduleConfigs, Mut};
 use bevy::render::extract_resource::ExtractResourcePlugin;
 use bevy::render::render_graph::RenderGraph;
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
+use crate::simulation::resources::config::PhysarumConfig;
 
 /// Plugin for the Physarum simulation
 pub struct PhysarumPlugin;
@@ -19,6 +20,7 @@ impl Plugin for PhysarumPlugin {
         app.add_plugins((
             ExtractResourcePlugin::<PhysarumImages>::default(),
             ExtractResourcePlugin::<PhysarumInputState>::default(),
+            ExtractResourcePlugin::<PhysarumConfig>::default(),
         ));
 
         // Initialize the input state resource
@@ -26,6 +28,7 @@ impl Plugin for PhysarumPlugin {
 
         // Register the pipeline status resource
         let render_app = app.sub_app_mut(RenderApp);
+        render_app.init_resource::<PhysarumConfig>();
 
         render_app
             .add_systems(RenderStartup, init_physarum_pipeline)
