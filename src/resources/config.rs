@@ -1,7 +1,9 @@
+use bevy::post_process::bloom::Bloom;
+use bevy::post_process::dof::DepthOfField;
 use bevy::prelude::Resource;
 use bevy::render::extract_resource::ExtractResource;
 
-use crate::simulation::resources::render::PointSettings;
+use crate::resources::render::PointSettings;
 
 #[derive(Resource, Clone, ExtractResource)]
 pub struct PhysarumConfig {
@@ -15,6 +17,7 @@ pub struct PhysarumConfig {
     pub deposit_factor: f32,
     pub color_mode: u32,
     pub action_area_size_sigma: f32,
+    pub post_process_config: PostProcessConfig,
 
     // Parameter selection/state (better placed in UI panel)
     pub settings_changed: bool,
@@ -24,7 +27,7 @@ pub struct PhysarumConfig {
 
 impl Default for PhysarumConfig {
     fn default() -> Self {
-        use crate::simulation::utils::load_parameters;
+        use crate::utils::load_parameters;
 
         let new_index = 0;
         let current_settings = load_parameters(new_index);
@@ -38,11 +41,30 @@ impl Default for PhysarumConfig {
             decay_factor: 0.99,
             pixel_scale_factor: 1.0,
             deposit_factor: 1.0,
-            color_mode: 2,
+            color_mode: 0,
             action_area_size_sigma: 0.2,
+            post_process_config: PostProcessConfig::default(),
             settings_changed: false,
             new_index,
             current_settings,
         }
     }
+}
+
+#[derive(Clone)]
+pub struct ChromaticAberrationConfig {
+    pub intensity: f32,
+}
+
+impl Default for ChromaticAberrationConfig {
+    fn default() -> Self {
+        Self { intensity: 0.01 }
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct PostProcessConfig {
+    pub bloom: Bloom,
+    pub chromatic_aberration: ChromaticAberrationConfig,
+    pub depth_of_field: DepthOfField
 }

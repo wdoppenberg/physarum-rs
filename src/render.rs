@@ -1,7 +1,7 @@
-use crate::simulation::buffers::UniformData;
-use crate::simulation::resources::config::PhysarumConfig;
-use crate::simulation::resources::input::PhysarumInputState;
-use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
+use crate::buffers::UniformData;
+use crate::resources::config::PhysarumConfig;
+use crate::resources::input::PhysarumInputState;
+use crate::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
 use bevy::log::{debug, info};
 use bevy::prelude::*;
 use bevy::render::render_graph::{self, RenderLabel};

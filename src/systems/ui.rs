@@ -1,6 +1,6 @@
-use crate::simulation::resources::config::PhysarumConfig;
-use crate::simulation::resources::ui::UiState;
-use crate::simulation::utils::load_parameters;
+use crate::resources::config::PhysarumConfig;
+use crate::resources::ui::UiState;
+use crate::utils::load_parameters;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
@@ -155,6 +155,37 @@ pub fn sidebar_ui(
                         }
                     }
                 });
+
+            ui.separator();
+            ui.label("Post-processing");
+            ui.add(
+                egui::Slider::new(
+                    &mut config.post_process_config.chromatic_aberration.intensity,
+                    0.0..=0.5,
+                )
+                .text("Chromatic aberration"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.post_process_config.bloom.intensity, 0.0..=0.5)
+                    .text("Bloom intensity"),
+            );
+
+            ui.add(
+                egui::Slider::new(&mut config.post_process_config.bloom.scale.x, 0.0..=20.)
+                    .text("Bloom X-scale"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.post_process_config.bloom.scale.y, 0.0..=20.)
+                    .text("Bloom Y-scale"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.post_process_config.depth_of_field.focal_distance, 0.0..=80.)
+                    .text("Focal distance"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.post_process_config.depth_of_field.max_depth, 0.0..=80.)
+                    .text("Max depth"),
+            );
 
             ui.separator();
             ui.label(format!("Particles: {}", config.num_particles));

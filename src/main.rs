@@ -1,13 +1,20 @@
+mod buffers;
+pub mod constants;
+pub mod plugin;
+pub mod render;
+pub mod resources;
+pub mod systems;
+pub mod utils;
+
+
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::prelude::*;
 
-pub mod simulation;
-
 use bevy::input_focus::InputDispatchPlugin;
 use bevy_egui::EguiPlugin;
-use simulation::plugin::PhysarumPlugin;
-use simulation::resources::config::PhysarumConfig;
-use simulation::systems::render::render_setup;
+use plugin::PhysarumPlugin;
+use resources::config::PhysarumConfig;
+use systems::render::render_setup;
 
 fn main() -> AppExit {
     // Create default config and use it for window setup

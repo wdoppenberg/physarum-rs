@@ -1,7 +1,7 @@
-use crate::simulation::constants::PARAMETERS_MATRIX;
-use crate::simulation::resources::config::PhysarumConfig;
-use crate::simulation::resources::input::PhysarumInputState;
-use crate::simulation::utils::load_parameters;
+use crate::constants::PARAMETERS_MATRIX;
+use crate::resources::config::PhysarumConfig;
+use crate::resources::input::PhysarumInputState;
+use crate::utils::load_parameters;
 use bevy::input::ButtonInput;
 use bevy::log::info;
 use bevy::prelude::{KeyCode, Query, Res, ResMut, Time, Vec2, With};

@@ -3,6 +3,9 @@ use bevy::camera::Camera2d;
 use bevy::image::Image;
 use bevy::log::info;
 use bevy::math::{Vec2, Vec3};
+use bevy::post_process::dof::DepthOfField;
+use bevy::post_process::bloom::Bloom;
+use bevy::post_process::effect_stack::ChromaticAberration;
 use bevy::prelude::{default, Commands, Res, ResMut, Sprite, Transform};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_resource::{
@@ -14,15 +17,15 @@ use bevy::render::render_resource::{
 };
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::texture::GpuImage;
-
-use crate::simulation::buffers::UniformData;
-use crate::simulation::render::create_compute_pipeline_id;
-use crate::simulation::resources::config::PhysarumConfig;
-use crate::simulation::resources::render::{
+use bevy::render::view::Hdr;
+use crate::buffers::UniformData;
+use crate::render::create_compute_pipeline_id;
+use crate::resources::config::PhysarumConfig;
+use crate::resources::render::{
     PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler,
     PhysarumSimulationSettings,
 };
-use crate::simulation::utils::{binding_entry, create_particles_buffer, load_parameters};
+use crate::utils::{binding_entry, create_particles_buffer, load_parameters};
 
 pub fn render_setup(
     mut commands: Commands,
@@ -70,7 +73,13 @@ pub fn render_setup(
         display_texture: display_texture.clone(), // Clone the handle for the resource
     });
 
-    commands.spawn(Camera2d);
+    commands.spawn((
+        Camera2d,
+        Hdr,
+        ChromaticAberration::default(),
+        Bloom::default(),
+        DepthOfField::default(),
+    ));
     commands.spawn((
         Sprite {
             image: display_texture.clone(),

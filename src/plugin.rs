@@ -1,15 +1,16 @@
-use crate::simulation::render::{PhysarumSimulationLabel, PhysarumSimulationNode};
-use crate::simulation::resources::config::PhysarumConfig;
-use crate::simulation::resources::input::PhysarumInputState;
-use crate::simulation::resources::render::PhysarumImages;
-use crate::simulation::resources::ui::UiState;
-use crate::simulation::systems::main::handle_input;
-use crate::simulation::systems::render::{
+use crate::render::{PhysarumSimulationLabel, PhysarumSimulationNode};
+use crate::resources::config::PhysarumConfig;
+use crate::resources::input::PhysarumInputState;
+use crate::resources::render::PhysarumImages;
+use crate::resources::ui::UiState;
+use crate::systems::main::handle_input;
+use crate::systems::post_process::update_post_process_settings;
+use crate::systems::render::{
     init_physarum_pipeline, prepare_bind_groups, update_simulation_params,
 };
-use crate::simulation::systems::ui::sidebar_ui;
+use crate::systems::ui::sidebar_ui;
 use bevy::app::{App, Plugin, Update};
-use bevy::prelude::{IntoScheduleConfigs, Mut};
+use bevy::prelude::{resource_changed, IntoScheduleConfigs, Mut};
 use bevy::render::extract_resource::ExtractResourcePlugin;
 use bevy::render::render_graph::RenderGraph;
 use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
@@ -53,7 +54,13 @@ impl Plugin for PhysarumPlugin {
             bevy::render::graph::CameraDriverLabel,
         );
 
-        app.add_systems(Update, handle_input)
-            .add_systems(EguiPrimaryContextPass, sidebar_ui);
+        app.add_systems(
+            Update,
+            (
+                handle_input,
+                update_post_process_settings.run_if(resource_changed::<PhysarumConfig>),
+            ),
+        )
+        .add_systems(EguiPrimaryContextPass, sidebar_ui);
     }
 }
