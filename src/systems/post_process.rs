@@ -34,6 +34,6 @@ pub fn update_post_process_settings(
     }
 
     for mut dof in &mut depth_of_field {
-        *dof = app_settings.post_process_config.depth_of_field.clone();
+        *dof = app_settings.post_process_config.depth_of_field;
     }
 }

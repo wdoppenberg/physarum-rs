@@ -179,12 +179,18 @@ pub fn sidebar_ui(
                     .text("Bloom Y-scale"),
             );
             ui.add(
-                egui::Slider::new(&mut config.post_process_config.depth_of_field.focal_distance, 0.0..=80.)
-                    .text("Focal distance"),
+                egui::Slider::new(
+                    &mut config.post_process_config.depth_of_field.focal_distance,
+                    0.0..=80.,
+                )
+                .text("Focal distance"),
             );
             ui.add(
-                egui::Slider::new(&mut config.post_process_config.depth_of_field.max_depth, 0.0..=80.)
-                    .text("Max depth"),
+                egui::Slider::new(
+                    &mut config.post_process_config.depth_of_field.max_depth,
+                    0.0..=80.,
+                )
+                .text("Max depth"),
             );
 
             ui.separator();

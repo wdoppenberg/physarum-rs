@@ -1,9 +1,9 @@
+use crate::constants::PARAMETERS_MATRIX;
+use crate::resources::render::SimulationSettings;
 use bevy::prelude::*;
 use bevy::render::render_resource::*;
 use bevy::render::renderer::RenderDevice;
 use rand::Rng;
-use crate::constants::PARAMETERS_MATRIX;
-use crate::resources::render::SimulationSettings;
 /// Create a buffer containing the initial particle positions
 pub fn create_particles_buffer(render_device: &RenderDevice, num_particles: u32) -> Buffer {
     let mut rng = rand::rng();

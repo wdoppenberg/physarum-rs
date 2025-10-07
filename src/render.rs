@@ -124,7 +124,7 @@ impl render_graph::Node for PhysarumSimulationNode {
         let queue = world.resource::<RenderQueue>();
         let input = world.resource::<PhysarumInputState>();
         let config = world.resource::<PhysarumConfig>();
-        
+
         // Get boid count from extracted boids, default to 0 if not present
         let num_boids = world
             .get_resource::<ExtractedBoids>()

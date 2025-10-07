@@ -66,5 +66,5 @@ impl Default for ChromaticAberrationConfig {
 pub struct PostProcessConfig {
     pub bloom: Bloom,
     pub chromatic_aberration: ChromaticAberrationConfig,
-    pub depth_of_field: DepthOfField
+    pub depth_of_field: DepthOfField,
 }

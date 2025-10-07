@@ -1,10 +1,19 @@
+use crate::buffers::UniformData;
+use crate::components::boids::Boid;
+use crate::render::create_compute_pipeline_id;
+use crate::resources::config::PhysarumConfig;
+use crate::resources::render::{
+    PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler,
+    PhysarumSimulationSettings,
+};
+use crate::utils::{binding_entry, create_particles_buffer, load_parameters};
 use bevy::asset::{AssetServer, Assets, RenderAssetUsages};
 use bevy::camera::Camera2d;
 use bevy::image::Image;
 use bevy::log::info;
 use bevy::math::{Vec2, Vec3};
-use bevy::post_process::dof::DepthOfField;
 use bevy::post_process::bloom::Bloom;
+use bevy::post_process::dof::DepthOfField;
 use bevy::post_process::effect_stack::ChromaticAberration;
 use bevy::prelude::{default, Commands, Query, Res, ResMut, Resource, Sprite, Transform};
 use bevy::render::render_asset::RenderAssets;
@@ -18,15 +27,6 @@ use bevy::render::render_resource::{
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::texture::GpuImage;
 use bevy::render::view::Hdr;
-use crate::buffers::UniformData;
-use crate::render::create_compute_pipeline_id;
-use crate::components::boids::Boid;
-use crate::resources::config::PhysarumConfig;
-use crate::resources::render::{
-    PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler,
-    PhysarumSimulationSettings,
-};
-use crate::utils::{binding_entry, create_particles_buffer, load_parameters};
 
 pub fn render_setup(
     mut commands: Commands,
@@ -460,10 +460,7 @@ pub struct ExtractedBoids {
 }
 
 /// Extract boid components from main world to render world
-pub fn extract_boids(
-    mut commands: Commands,
-    boids_query: Query<&Boid>,
-) {
+pub fn extract_boids(mut commands: Commands, boids_query: Query<&Boid>) {
     let boids: Vec<Boid> = boids_query.iter().copied().collect();
     commands.insert_resource(ExtractedBoids { boids });
 }
@@ -475,10 +472,10 @@ pub fn upload_boids_to_gpu(
     render_queue: Res<RenderQueue>,
 ) {
     use crate::buffers::BoidData;
-    
+
     // Limit to max 50 boids (GPU buffer size)
     let boid_count = extracted_boids.boids.len().min(50);
-    
+
     // Convert Boid components to BoidData for GPU
     let mut boid_data: Vec<BoidData> = Vec::with_capacity(boid_count);
     for boid in extracted_boids.boids.iter().take(boid_count) {
@@ -491,7 +488,7 @@ pub fn upload_boids_to_gpu(
             _padding: [0.0, 0.0, 0.0],
         });
     }
-    
+
     // Write to GPU buffer
     if !boid_data.is_empty() {
         let boid_bytes = bytemuck::cast_slice(&boid_data);
