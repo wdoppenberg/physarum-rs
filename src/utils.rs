@@ -3,7 +3,7 @@ use bevy::render::render_resource::*;
 use bevy::render::renderer::RenderDevice;
 use rand::Rng;
 use crate::constants::PARAMETERS_MATRIX;
-use crate::resources::render::PointSettings;
+use crate::resources::render::SimulationSettings;
 /// Create a buffer containing the initial particle positions
 pub fn create_particles_buffer(render_device: &RenderDevice, num_particles: u32) -> Buffer {
     let mut rng = rand::rng();
@@ -36,11 +36,11 @@ pub fn create_particles_buffer(render_device: &RenderDevice, num_particles: u32)
 }
 
 /// Load parameters from the parameters matrix
-pub fn load_parameters(index: usize) -> PointSettings {
+pub fn load_parameters(index: usize) -> SimulationSettings {
     let index = index % PARAMETERS_MATRIX.len();
     let params = PARAMETERS_MATRIX[index];
 
-    PointSettings {
+    SimulationSettings {
         default_scaling_factor: 1.0,
         sensor_distance0: params[0],
         sd_exponent: params[1],

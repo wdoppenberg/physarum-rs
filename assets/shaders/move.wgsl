@@ -16,10 +16,22 @@ struct Uniforms {
     spawnParticles: u32,
     spawnFraction: f32,
     randomSpawnNumber: u32,
+    numBoids: u32,
 };
 @group(0) @binding(10) var<uniform> uniforms: Uniforms;
 
-struct PointSettings {
+struct BoidData {
+    x: f32,
+    y: f32,
+    moveBiasX: f32,
+    moveBiasY: f32,
+    l2: f32,
+    _padding: vec3<f32>,
+};
+
+@group(0) @binding(11) var<storage, read> boids: array<BoidData, 50>;
+
+struct SimulationSettings {
     default_scaling_factor: f32,
     sensor_distance0: f32,
     sd_exponent: f32,
@@ -37,7 +49,7 @@ struct PointSettings {
     sensor_bias2: f32,
 };
 
-@group(0) @binding(5) var<storage, read> pointParams: array<PointSettings>;
+@group(0) @binding(5) var<storage, read> pointParams: array<SimulationSettings>;
 @group(0) @binding(0) var trailRead: texture_2d<f32>;
 @group(0) @binding(6) var trailSampler: sampler;
 
@@ -219,10 +231,28 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         newHeading = heading + rotationAngle;
     }
 
-    // Move bias from action and noise
+    // Move bias from action and noise (mouse/keyboard)
     let noiseValue = noise3(vec3<f32>(positionForNoise1.x, positionForNoise1.y, 0.8 * uniforms.time));
     let moveBiasFactor = 5.0 * lerper * noiseValue;
-    let moveBias = moveBiasFactor * vec2<f32>(uniforms.moveBiasActionX, uniforms.moveBiasActionY);
+    var moveBias = moveBiasFactor * vec2<f32>(uniforms.moveBiasActionX, uniforms.moveBiasActionY);
+    
+    // Add bias from all active boids
+    for (var i: u32 = 0u; i < uniforms.numBoids; i = i + 1u) {
+        let boid = boids[i];
+        let boidPos = vec2<f32>(boid.x, boid.y);
+        let normalizedBoidPos = vec2<f32>(boid.x / w, boid.y / h);
+        
+        // Calculate distance from particle to boid (similar to action point)
+        var positionFromBoid = normalizedPosition - normalizedBoidPos;
+        positionFromBoid.x = positionFromBoid.x * (w / h);
+        
+        let distanceFromBoid = length(positionFromBoid) * distanceNoiseFactor;
+        let boidLerper = exp(-distanceFromBoid * distanceFromBoid / max(1e-6, uniforms.actionAreaSizeSigma) / max(1e-6, uniforms.actionAreaSizeSigma));
+        
+        // Apply boid's bias with distance-based falloff
+        let boidBiasFactor = 5.0 * boidLerper * noiseValue;
+        moveBias = moveBias + boidBiasFactor * vec2<f32>(boid.moveBiasX, boid.moveBiasY);
+    }
 
     // Classic position
     let classicNewPosition = particlePos + vec2<f32>(moveDistance * cos(newHeading), moveDistance * sin(newHeading)) + moveBias;
@@ -241,7 +271,38 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var nextPos = mix(classicNewPosition, inertiaNewPosition, moveStyleLerper);
 
     // Spawning (limited: circular spawn only when spawnParticles == 1)
+    var shouldSpawn = false;
+    var spawnCenterX = uniforms.actionX;
+    var spawnCenterY = uniforms.actionY;
+    
+    // Check if spawning from action point (F key pressed)
     if (uniforms.spawnParticles >= 1u) {
+        shouldSpawn = true;
+    }
+    
+    // Check if spawning from any boid
+    for (var i: u32 = 0u; i < uniforms.numBoids; i = i + 1u) {
+        let boid = boids[i];
+        let boidPos = vec2<f32>(boid.x, boid.y);
+        let normalizedBoidPos = vec2<f32>(boid.x / w, boid.y / h);
+        
+        // Calculate distance from particle to boid
+        var positionFromBoid = normalizedPosition - normalizedBoidPos;
+        positionFromBoid.x = positionFromBoid.x * (w / h);
+        
+        let distanceFromBoid = length(positionFromBoid) * distanceNoiseFactor;
+        let boidLerper = exp(-distanceFromBoid * distanceFromBoid / max(1e-6, uniforms.actionAreaSizeSigma) / max(1e-6, uniforms.actionAreaSizeSigma));
+        
+        // If particle is close enough to this boid, spawn from boid
+        if (boidLerper > 0.1) {
+            shouldSpawn = true;
+            spawnCenterX = boid.x;
+            spawnCenterY = boid.y;
+            break; // Use first matching boid
+        }
+    }
+    
+    if (shouldSpawn) {
         let randForChoice = random01FromParticle(particlePos * 1.1);
         if (randForChoice < uniforms.spawnFraction) {
             let randForRadius = random01FromParticle(particlePos * 2.2);
@@ -251,7 +312,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let r1 = uniforms.actionAreaSizeSigma * 0.55 * (0.95 + 0.1 * randForRadius);
             let spos = r1 * vec2<f32>(cos(theta), sin(theta));
             let spos_px = spos * h;
-            nextPos = vec2<f32>(uniforms.actionX + spos_px.x, uniforms.actionY + spos_px.y);
+            nextPos = vec2<f32>(spawnCenterX + spos_px.x, spawnCenterY + spos_px.y);
         }
     }
 

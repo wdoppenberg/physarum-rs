@@ -3,7 +3,7 @@ use bevy::post_process::dof::DepthOfField;
 use bevy::prelude::Resource;
 use bevy::render::extract_resource::ExtractResource;
 
-use crate::resources::render::PointSettings;
+use crate::resources::render::SimulationSettings;
 
 #[derive(Resource, Clone, ExtractResource)]
 pub struct PhysarumConfig {
@@ -22,7 +22,7 @@ pub struct PhysarumConfig {
     // Parameter selection/state (better placed in UI panel)
     pub settings_changed: bool,
     pub new_index: usize,
-    pub current_settings: PointSettings,
+    pub current_settings: SimulationSettings,
 }
 
 impl Default for PhysarumConfig {
@@ -33,16 +33,16 @@ impl Default for PhysarumConfig {
         let current_settings = load_parameters(new_index);
 
         Self {
-            width: 3024,
-            height: 1964,
+            width: 1920,
+            height: 1080,
             display_factor: 1,
-            num_particles: 5_000_000,
+            num_particles: 15_000_000,
             work_group_size: 32,
             decay_factor: 0.99,
             pixel_scale_factor: 1.0,
             deposit_factor: 1.0,
             color_mode: 0,
-            action_area_size_sigma: 0.2,
+            action_area_size_sigma: 0.5,
             post_process_config: PostProcessConfig::default(),
             settings_changed: false,
             new_index,

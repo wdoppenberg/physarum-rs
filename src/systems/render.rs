@@ -6,7 +6,7 @@ use bevy::math::{Vec2, Vec3};
 use bevy::post_process::dof::DepthOfField;
 use bevy::post_process::bloom::Bloom;
 use bevy::post_process::effect_stack::ChromaticAberration;
-use bevy::prelude::{default, Commands, Res, ResMut, Sprite, Transform};
+use bevy::prelude::{default, Commands, Query, Res, ResMut, Resource, Sprite, Transform};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_resource::{
     encase, AddressMode, BindGroupEntry, BindingResource, BindingType, BufferBinding,
@@ -20,6 +20,7 @@ use bevy::render::texture::GpuImage;
 use bevy::render::view::Hdr;
 use crate::buffers::UniformData;
 use crate::render::create_compute_pipeline_id;
+use crate::components::boids::Boid;
 use crate::resources::config::PhysarumConfig;
 use crate::resources::render::{
     PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler,
@@ -96,7 +97,7 @@ fn create_bind_group_entries<'a>(
     display_texture_view: &'a TextureView,
     buffers: &'a PhysarumBuffers,
     sampler: &'a Sampler,
-) -> [BindGroupEntry<'a>; 8] {
+) -> [BindGroupEntry<'a>; 9] {
     [
         BindGroupEntry {
             binding: 0,
@@ -142,6 +143,14 @@ fn create_bind_group_entries<'a>(
             binding: 10,
             resource: BindingResource::Buffer(BufferBinding {
                 buffer: &buffers.uniform_buffer,
+                offset: 0,
+                size: None,
+            }),
+        },
+        BindGroupEntry {
+            binding: 11,
+            resource: BindingResource::Buffer(BufferBinding {
+                buffer: &buffers.boids_buffer,
                 offset: 0,
                 size: None,
             }),
@@ -269,6 +278,7 @@ pub fn init_physarum_pipeline(
         spawn_particles: 0,
         spawn_fraction: 0.0,
         random_spawn_number: 0,
+        num_boids: 0,
     };
     let mut buffer = encase::UniformBuffer::new(Vec::new());
     buffer.write(&uniform_data).unwrap();
@@ -282,11 +292,20 @@ pub fn init_physarum_pipeline(
         mapped_at_creation: false,
     });
 
+    // Create boids buffer for up to 50 boids (32 bytes per BoidData: 5 f32s + 3 f32s padding)
+    let boids_buffer = render_device.create_buffer(&BufferDescriptor {
+        label: Some("Boids Buffer"),
+        size: (50 * 32) as u64, // 50 boids * 32 bytes each
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
     commands.insert_resource(PhysarumBuffers {
         counter_buffer,
         particles_buffer,
         uniform_buffer,
         params_buffer,
+        boids_buffer,
     });
 
     let setter_shader = asset_server.load("shaders/setter.wgsl");
@@ -355,6 +374,14 @@ pub fn init_physarum_pipeline(
                     min_binding_size: None,
                 },
             ), // Uniforms
+            binding_entry(
+                11,
+                BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            ), // Boids
         ],
     );
 
@@ -423,5 +450,51 @@ pub fn update_simulation_params(
 
         // Reset the flag
         config.settings_changed = false;
+    }
+}
+
+/// Resource to hold extracted boid data in the render world
+#[derive(Resource, Default)]
+pub struct ExtractedBoids {
+    pub boids: Vec<Boid>,
+}
+
+/// Extract boid components from main world to render world
+pub fn extract_boids(
+    mut commands: Commands,
+    boids_query: Query<&Boid>,
+) {
+    let boids: Vec<Boid> = boids_query.iter().copied().collect();
+    commands.insert_resource(ExtractedBoids { boids });
+}
+
+/// Upload extracted boid data to GPU buffer
+pub fn upload_boids_to_gpu(
+    extracted_boids: Res<ExtractedBoids>,
+    buffers: Res<PhysarumBuffers>,
+    render_queue: Res<RenderQueue>,
+) {
+    use crate::buffers::BoidData;
+    
+    // Limit to max 50 boids (GPU buffer size)
+    let boid_count = extracted_boids.boids.len().min(50);
+    
+    // Convert Boid components to BoidData for GPU
+    let mut boid_data: Vec<BoidData> = Vec::with_capacity(boid_count);
+    for boid in extracted_boids.boids.iter().take(boid_count) {
+        boid_data.push(BoidData {
+            x: boid.x,
+            y: boid.y,
+            move_bias_x: boid.move_bias_x,
+            move_bias_y: boid.move_bias_y,
+            l2: boid.l2,
+            _padding: [0.0, 0.0, 0.0],
+        });
+    }
+    
+    // Write to GPU buffer
+    if !boid_data.is_empty() {
+        let boid_bytes = bytemuck::cast_slice(&boid_data);
+        render_queue.write_buffer(&buffers.boids_buffer, 0, boid_bytes);
     }
 }

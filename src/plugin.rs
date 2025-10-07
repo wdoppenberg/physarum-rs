@@ -3,17 +3,19 @@ use crate::resources::config::PhysarumConfig;
 use crate::resources::input::PhysarumInputState;
 use crate::resources::render::PhysarumImages;
 use crate::resources::ui::UiState;
-use crate::systems::main::handle_input;
+use crate::systems::boids::{spawn_random_boid, update_boids};
+use crate::systems::input::handle_input;
 use crate::systems::post_process::update_post_process_settings;
 use crate::systems::render::{
-    init_physarum_pipeline, prepare_bind_groups, update_simulation_params,
+    extract_boids, init_physarum_pipeline, prepare_bind_groups, update_simulation_params,
+    upload_boids_to_gpu,
 };
 use crate::systems::ui::sidebar_ui;
 use bevy::app::{App, Plugin, Update};
 use bevy::prelude::{resource_changed, IntoScheduleConfigs, Mut};
 use bevy::render::extract_resource::ExtractResourcePlugin;
 use bevy::render::render_graph::RenderGraph;
-use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
+use bevy::render::{ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems};
 use bevy_egui::EguiPrimaryContextPass;
 
 /// Plugin for the Physarum simulation
@@ -38,12 +40,13 @@ impl Plugin for PhysarumPlugin {
         render_app.init_resource::<PhysarumConfig>();
 
         render_app
+            .add_systems(ExtractSchedule, extract_boids)
             .add_systems(RenderStartup, init_physarum_pipeline)
             .add_systems(
                 Render,
                 (
                     prepare_bind_groups.in_set(RenderSystems::PrepareBindGroups),
-                    update_simulation_params.in_set(RenderSystems::Queue),
+                    (update_simulation_params, upload_boids_to_gpu).in_set(RenderSystems::Queue),
                 ),
             );
 
@@ -58,6 +61,8 @@ impl Plugin for PhysarumPlugin {
             Update,
             (
                 handle_input,
+                update_boids,
+                spawn_random_boid,
                 update_post_process_settings.run_if(resource_changed::<PhysarumConfig>),
             ),
         )

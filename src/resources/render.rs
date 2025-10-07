@@ -9,7 +9,7 @@ use bevy::render::render_resource::{
 /// Settings for the simulation points
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
-pub struct PointSettings {
+pub struct SimulationSettings {
     pub default_scaling_factor: f32,
     pub sensor_distance0: f32,
     pub sd_exponent: f32,
@@ -36,6 +36,7 @@ pub struct PhysarumBuffers {
     pub(crate) counter_buffer: Buffer,
     pub(crate) particles_buffer: Buffer,
     pub(crate) params_buffer: Buffer,
+    pub(crate) boids_buffer: Buffer,
 }
 
 #[derive(Resource, Clone, ExtractResource)]
@@ -60,5 +61,5 @@ pub struct PhysarumBindGroups(pub [BindGroup; 2]);
 #[derive(Resource)]
 pub struct PhysarumSimulationSettings {
     pub(crate) index: usize,
-    pub(crate) point_settings: PointSettings,
+    pub(crate) point_settings: SimulationSettings,
 }
