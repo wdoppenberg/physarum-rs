@@ -7,9 +7,10 @@ use crate::systems::boids::{spawn_random_boid, update_boids};
 use crate::systems::input::handle_input;
 use crate::systems::post_process::update_post_process_settings;
 use crate::systems::render::{
-    extract_boids, init_physarum_pipeline, prepare_bind_groups, update_simulation_params,
-    upload_boids_to_gpu,
+    extract_boids, handle_buffer_resize, init_physarum_pipeline, prepare_bind_groups,
+    update_simulation_params, upload_boids_to_gpu, RenderWorldDimensions,
 };
+use crate::systems::resize::handle_window_resize;
 use crate::systems::ui::sidebar_ui;
 use bevy::app::{App, Plugin, Update};
 use bevy::prelude::{resource_changed, IntoScheduleConfigs, Mut};
@@ -38,6 +39,7 @@ impl Plugin for PhysarumPlugin {
         // Register the pipeline status resource
         let render_app = app.sub_app_mut(RenderApp);
         render_app.init_resource::<PhysarumConfig>();
+        render_app.init_resource::<RenderWorldDimensions>();
 
         render_app
             .add_systems(ExtractSchedule, extract_boids)
@@ -45,6 +47,7 @@ impl Plugin for PhysarumPlugin {
             .add_systems(
                 Render,
                 (
+                    handle_buffer_resize.in_set(RenderSystems::PrepareResources),
                     prepare_bind_groups.in_set(RenderSystems::PrepareBindGroups),
                     (update_simulation_params, upload_boids_to_gpu).in_set(RenderSystems::Queue),
                 ),
@@ -60,6 +63,7 @@ impl Plugin for PhysarumPlugin {
         app.add_systems(
             Update,
             (
+                handle_window_resize,
                 handle_input,
                 update_boids,
                 spawn_random_boid,

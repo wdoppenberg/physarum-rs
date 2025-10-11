@@ -58,7 +58,7 @@ pub fn render_setup(
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        &vec![0; (width * height * 2) as usize],
+        &vec![0; (width * height * 4) as usize],
         TextureFormat::R32Float,
         RenderAssetUsages::RENDER_WORLD,
     );
@@ -493,5 +493,81 @@ pub fn upload_boids_to_gpu(
     if !boid_data.is_empty() {
         let boid_bytes = bytemuck::cast_slice(&boid_data);
         render_queue.write_buffer(&buffers.boids_buffer, 0, boid_bytes);
+    }
+}
+
+/// Resource to track last known dimensions in render world
+#[derive(Resource, Default)]
+pub struct RenderWorldDimensions {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Recreate size-dependent buffers when window is resized
+pub fn handle_buffer_resize(
+    mut commands: Commands,
+    config: Res<PhysarumConfig>,
+    mut dimensions: ResMut<RenderWorldDimensions>,
+    buffers: Option<Res<PhysarumBuffers>>,
+    render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
+) {
+    // Check if dimensions have changed
+    if config.width == dimensions.width && config.height == dimensions.height {
+        return;
+    }
+
+    info!(
+        "Render world dimensions changed to {}x{}, recreating buffers",
+        config.width, config.height
+    );
+
+    // Update tracked dimensions
+    dimensions.width = config.width;
+    dimensions.height = config.height;
+
+    if let Some(buffers) = buffers {
+        // Create new counter buffer with new dimensions
+        let counter_buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("Counter Buffer"),
+            size: (config.width * config.height * 4) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Update uniform buffer with new dimensions
+        let uniform_data = UniformData {
+            width: config.width,
+            height: config.height,
+            value: config.decay_factor,
+            color_mode: config.color_mode,
+            num_particles: config.num_particles,
+            time: 0.0,
+            action_area_size_sigma: 0.0,
+            action_x: 0.0,
+            action_y: 0.0,
+            move_bias_action_x: 0.0,
+            move_bias_action_y: 0.0,
+            l2_action: 0.0,
+            spawn_particles: 0,
+            spawn_fraction: 0.0,
+            random_spawn_number: 0,
+            num_boids: 0,
+        };
+        let mut buffer = encase::UniformBuffer::new(Vec::new());
+        buffer.write(&uniform_data).unwrap();
+        render_queue.write_buffer(&buffers.uniform_buffer, 0, &buffer.into_inner());
+
+        // Create new PhysarumBuffers resource with new counter buffer
+        commands.insert_resource(PhysarumBuffers {
+            counter_buffer,
+            particles_buffer: buffers.particles_buffer.clone(),
+            uniform_buffer: buffers.uniform_buffer.clone(),
+            params_buffer: buffers.params_buffer.clone(),
+            boids_buffer: buffers.boids_buffer.clone(),
+        });
+
+        // Force bind groups to be recreated by removing the resource
+        commands.remove_resource::<PhysarumBindGroups>();
     }
 }
