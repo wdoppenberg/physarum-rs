@@ -2,7 +2,6 @@ use crate::buffers::UniformData;
 use crate::resources::config::PhysarumConfig;
 use crate::resources::input::PhysarumInputState;
 use crate::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumPipeline};
-use crate::systems::render::ExtractedBoids;
 use bevy::log::{debug, info};
 use bevy::prelude::*;
 use bevy::render::render_graph::{self, RenderLabel};
@@ -12,7 +11,7 @@ use bevy::render::renderer::{RenderContext, RenderQueue};
 /// Create a compute pipeline ID and queue it for creation
 pub fn create_compute_pipeline_id(
     pipeline_cache: &mut PipelineCache,
-    layout: &BindGroupLayout,
+    layout: &BindGroupLayoutDescriptor,
     shader: &Handle<Shader>,
     entry_point: &str,
 ) -> CachedComputePipelineId {
@@ -125,12 +124,6 @@ impl render_graph::Node for PhysarumSimulationNode {
         let input = world.resource::<PhysarumInputState>();
         let config = world.resource::<PhysarumConfig>();
 
-        // Get boid count from extracted boids, default to 0 if not present
-        let num_boids = world
-            .get_resource::<ExtractedBoids>()
-            .map(|b| b.boids.len().min(50) as u32)
-            .unwrap_or(0);
-
         match &self.state {
             PhysarumSimulationState::Loading => {}
             PhysarumSimulationState::Init => {
@@ -157,7 +150,6 @@ impl render_graph::Node for PhysarumSimulationNode {
                         spawn_particles: input.spawn_particles,
                         spawn_fraction: input.spawn_fraction,
                         random_spawn_number: input.random_spawn_number,
-                        num_boids,
                     };
 
                     let mut buffer = encase::UniformBuffer::new(Vec::new());
@@ -205,7 +197,6 @@ impl render_graph::Node for PhysarumSimulationNode {
                             spawn_particles: input.spawn_particles,
                             spawn_fraction: input.spawn_fraction,
                             random_spawn_number: input.random_spawn_number,
-                            num_boids,
                         };
 
                         let mut buffer = encase::UniformBuffer::new(Vec::new());
@@ -245,7 +236,6 @@ impl render_graph::Node for PhysarumSimulationNode {
                             spawn_particles: input.spawn_particles,
                             spawn_fraction: input.spawn_fraction,
                             random_spawn_number: input.random_spawn_number,
-                            num_boids,
                         };
                         let mut buffer = encase::UniformBuffer::new(Vec::new());
                         buffer.write(&uniform_data).unwrap();
@@ -284,7 +274,6 @@ impl render_graph::Node for PhysarumSimulationNode {
                             spawn_particles: input.spawn_particles,
                             spawn_fraction: input.spawn_fraction,
                             random_spawn_number: input.random_spawn_number,
-                            num_boids,
                         };
                         let mut buffer = encase::UniformBuffer::new(Vec::new());
                         buffer.write(&uniform_data).unwrap();
@@ -333,7 +322,6 @@ impl render_graph::Node for PhysarumSimulationNode {
                             spawn_particles: input.spawn_particles,
                             spawn_fraction: input.spawn_fraction,
                             random_spawn_number: input.random_spawn_number,
-                            num_boids,
                         };
                         let mut buffer = encase::UniformBuffer::new(Vec::new());
                         buffer.write(&uniform_data).unwrap();

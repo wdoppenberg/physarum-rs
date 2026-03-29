@@ -6,6 +6,7 @@ use bevy::render::renderer::RenderDevice;
 use rand::Rng;
 /// Create a buffer containing the initial particle positions
 pub fn create_particles_buffer(render_device: &RenderDevice, num_particles: u32) -> Buffer {
+    let start = std::time::Instant::now();
     let mut rng = rand::rng();
     let mut initial_particle_data = Vec::with_capacity(3 * num_particles as usize);
 
@@ -28,11 +29,13 @@ pub fn create_particles_buffer(render_device: &RenderDevice, num_particles: u32)
         initial_particle_data.push(0u32);
     }
 
-    render_device.create_buffer_with_data(&BufferInitDescriptor {
+    let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
         label: Some("Particle Buffer"),
         contents: bytemuck::cast_slice(&initial_particle_data),
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-    })
+    });
+    println!("create_particles_buffer took {:?}", start.elapsed());
+    buffer
 }
 
 /// Load parameters from the parameters matrix

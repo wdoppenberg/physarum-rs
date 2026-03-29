@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
 /// Color mode names matching the shader implementations
-const COLOR_MODES: &[(&str, u32)] = &[
+const COLOR_MODES: [(&str, u32); 12] = [
     ("Rainbow HSV", 0),
     ("Psychedelic Fire", 1),
     ("Electric Ice", 2),
@@ -127,7 +127,7 @@ pub fn sidebar_ui(
                 .selected_text(current_color_name)
                 .show_ui(ui, |ui| {
                     for (name, mode) in COLOR_MODES {
-                        ui.selectable_value(&mut config.color_mode, *mode, *name);
+                        ui.selectable_value(&mut config.color_mode, mode, name);
                     }
                 });
 

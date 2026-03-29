@@ -3,12 +3,11 @@ use crate::resources::config::PhysarumConfig;
 use crate::resources::input::PhysarumInputState;
 use crate::resources::render::PhysarumImages;
 use crate::resources::ui::UiState;
-use crate::systems::boids::{spawn_random_boid, update_boids};
 use crate::systems::input::handle_input;
 use crate::systems::post_process::update_post_process_settings;
 use crate::systems::render::{
-    extract_boids, handle_buffer_resize, init_physarum_pipeline, prepare_bind_groups,
-    update_simulation_params, upload_boids_to_gpu, RenderWorldDimensions,
+    handle_buffer_resize, init_physarum_pipeline, prepare_bind_groups, update_simulation_params,
+    RenderWorldDimensions,
 };
 use crate::systems::resize::handle_window_resize;
 use crate::systems::ui::sidebar_ui;
@@ -42,14 +41,13 @@ impl Plugin for PhysarumPlugin {
         render_app.init_resource::<RenderWorldDimensions>();
 
         render_app
-            .add_systems(ExtractSchedule, extract_boids)
             .add_systems(RenderStartup, init_physarum_pipeline)
             .add_systems(
                 Render,
                 (
                     handle_buffer_resize.in_set(RenderSystems::PrepareResources),
+                    update_simulation_params.in_set(RenderSystems::PrepareResources),
                     prepare_bind_groups.in_set(RenderSystems::PrepareBindGroups),
-                    (update_simulation_params, upload_boids_to_gpu).in_set(RenderSystems::Queue),
                 ),
             );
 
@@ -65,8 +63,6 @@ impl Plugin for PhysarumPlugin {
             (
                 handle_window_resize,
                 handle_input,
-                update_boids,
-                spawn_random_boid,
                 update_post_process_settings.run_if(resource_changed::<PhysarumConfig>),
             ),
         )

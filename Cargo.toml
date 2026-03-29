@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.17.2", default-features = false, features = [
+bevy = { version = "0.18.1", default-features = false, features = [
     "bevy_render",
     "bevy_core_pipeline",
     "bevy_sprite",
@@ -19,7 +19,7 @@ bevy = { version = "0.17.2", default-features = false, features = [
     "web",
     "webgpu"
 ] }
-bevy_egui = "0.37.0"
+bevy_egui = "0.39.0"
 rand = "0.9.2"
 bytemuck = { version = "1.23.1", features = ["derive"] }
 

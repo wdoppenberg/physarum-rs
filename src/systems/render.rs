@@ -1,5 +1,4 @@
 use crate::buffers::UniformData;
-use crate::components::boids::Boid;
 use crate::render::create_compute_pipeline_id;
 use crate::resources::config::PhysarumConfig;
 use crate::resources::render::{
@@ -18,11 +17,11 @@ use bevy::post_process::effect_stack::ChromaticAberration;
 use bevy::prelude::{default, Commands, Query, Res, ResMut, Resource, Sprite, Transform};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_resource::{
-    encase, AddressMode, BindGroupEntry, BindingResource, BindingType, BufferBinding,
-    BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages, Extent3d, FilterMode,
-    PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor, StorageTextureAccess,
-    TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView,
-    TextureViewDimension,
+    encase, AddressMode, BindGroupEntry, BindGroupLayoutDescriptor, BindingResource, BindingType,
+    BufferBinding, BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages,
+    Extent3d, FilterMode, PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor,
+    StorageTextureAccess, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
+    TextureView, TextureViewDimension,
 };
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::texture::GpuImage;
@@ -161,6 +160,7 @@ fn create_bind_group_entries<'a>(
 pub fn prepare_bind_groups(
     mut commands: Commands,
     pipeline: Res<PhysarumPipeline>,
+    pipeline_cache: Res<PipelineCache>,
     gpu_images: Res<RenderAssets<GpuImage>>,
     images: Res<PhysarumImages>,
     sampler: Res<PhysarumSampler>,
@@ -179,9 +179,11 @@ pub fn prepare_bind_groups(
         .get(&images.display_texture)
         .expect("Display texture not found");
 
+    let bind_group_layout = pipeline_cache.get_bind_group_layout(&pipeline.compute_bind_group_layout);
+
     let compute_bind_group_a = render_device.create_bind_group(
         Some("Compute Bind Group A"),
-        &pipeline.compute_bind_group_layout,
+        &bind_group_layout,
         // &entries_fn(&view_a.texture_view, &view_b.texture_view)
         &create_bind_group_entries(
             &view_a.texture_view,
@@ -194,7 +196,7 @@ pub fn prepare_bind_groups(
 
     let compute_bind_group_b = render_device.create_bind_group(
         Some("Compute Bind Group B"),
-        &pipeline.compute_bind_group_layout,
+        &bind_group_layout,
         &create_bind_group_entries(
             &view_b.texture_view,
             &view_a.texture_view,
@@ -278,7 +280,6 @@ pub fn init_physarum_pipeline(
         spawn_particles: 0,
         spawn_fraction: 0.0,
         random_spawn_number: 0,
-        num_boids: 0,
     };
     let mut buffer = encase::UniformBuffer::new(Vec::new());
     buffer.write(&uniform_data).unwrap();
@@ -314,8 +315,8 @@ pub fn init_physarum_pipeline(
     let diffusion_shader = asset_server.load("shaders/diffusion.wgsl");
 
     // Define the binding layout
-    let compute_bind_group_layout = render_device.create_bind_group_layout(
-        Some("Compute Bind Group Layout"),
+    let compute_bind_group_layout = BindGroupLayoutDescriptor::new(
+        "Compute Bind Group Layout",
         &[
             binding_entry(
                 0,
@@ -453,49 +454,6 @@ pub fn update_simulation_params(
     }
 }
 
-/// Resource to hold extracted boid data in the render world
-#[derive(Resource, Default)]
-pub struct ExtractedBoids {
-    pub boids: Vec<Boid>,
-}
-
-/// Extract boid components from main world to render world
-pub fn extract_boids(mut commands: Commands, boids_query: Query<&Boid>) {
-    let boids: Vec<Boid> = boids_query.iter().copied().collect();
-    commands.insert_resource(ExtractedBoids { boids });
-}
-
-/// Upload extracted boid data to GPU buffer
-pub fn upload_boids_to_gpu(
-    extracted_boids: Res<ExtractedBoids>,
-    buffers: Res<PhysarumBuffers>,
-    render_queue: Res<RenderQueue>,
-) {
-    use crate::buffers::BoidData;
-
-    // Limit to max 50 boids (GPU buffer size)
-    let boid_count = extracted_boids.boids.len().min(50);
-
-    // Convert Boid components to BoidData for GPU
-    let mut boid_data: Vec<BoidData> = Vec::with_capacity(boid_count);
-    for boid in extracted_boids.boids.iter().take(boid_count) {
-        boid_data.push(BoidData {
-            x: boid.x,
-            y: boid.y,
-            move_bias_x: boid.move_bias_x,
-            move_bias_y: boid.move_bias_y,
-            l2: boid.l2,
-            _padding: [0.0, 0.0, 0.0],
-        });
-    }
-
-    // Write to GPU buffer
-    if !boid_data.is_empty() {
-        let boid_bytes = bytemuck::cast_slice(&boid_data);
-        render_queue.write_buffer(&buffers.boids_buffer, 0, boid_bytes);
-    }
-}
-
 /// Resource to track last known dimensions in render world
 #[derive(Resource, Default)]
 pub struct RenderWorldDimensions {
@@ -552,7 +510,6 @@ pub fn handle_buffer_resize(
             spawn_particles: 0,
             spawn_fraction: 0.0,
             random_spawn_number: 0,
-            num_boids: 0,
         };
         let mut buffer = encase::UniformBuffer::new(Vec::new());
         buffer.write(&uniform_data).unwrap();

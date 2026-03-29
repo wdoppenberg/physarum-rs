@@ -3,7 +3,7 @@ use bevy::image::Image;
 use bevy::prelude::Resource;
 use bevy::render::extract_resource::ExtractResource;
 use bevy::render::render_resource::{
-    BindGroup, BindGroupLayout, Buffer, CachedComputePipelineId, Sampler,
+    BindGroup, BindGroupLayoutDescriptor, Buffer, CachedComputePipelineId, Sampler,
 };
 
 /// Settings for the simulation points
@@ -48,7 +48,7 @@ pub struct PhysarumImages {
 
 #[derive(Resource)]
 pub struct PhysarumPipeline {
-    pub(crate) compute_bind_group_layout: BindGroupLayout,
+    pub(crate) compute_bind_group_layout: BindGroupLayoutDescriptor,
     pub setter_pipeline_id: CachedComputePipelineId,
     pub move_pipeline_id: CachedComputePipelineId,
     pub deposit_pipeline_id: CachedComputePipelineId,

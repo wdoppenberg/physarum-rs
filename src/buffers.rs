@@ -23,8 +23,6 @@ pub(crate) struct UniformData {
     pub(crate) spawn_particles: u32,
     pub(crate) spawn_fraction: f32,
     pub(crate) random_spawn_number: u32,
-    // Boid count for dynamic bias sources
-    pub(crate) num_boids: u32,
 }
 
 /// Single boid data structure for GPU storage

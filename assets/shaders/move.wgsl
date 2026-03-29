@@ -115,6 +115,52 @@ fn float_mod(x: f32, y: f32) -> f32 {
     return x - y * floor(x / y);
 }
 
+// Manual f16 pack/unpack to avoid requiring SHADER_FLOAT16_IN_FLOAT32 capability
+fn f32_to_f16_bits(f: f32) -> u32 {
+    let bits = bitcast<u32>(f);
+    let sign = (bits >> 31u) & 1u;
+    let exp = (bits >> 23u) & 0xFFu;
+    let mantissa = bits & 0x7FFFFFu;
+    if (exp == 255u) {
+        return (sign << 15u) | 0x7C00u | (mantissa >> 13u);
+    }
+    if (exp == 0u) {
+        return (sign << 15u);
+    }
+    let new_exp = i32(exp) - 127 + 15;
+    if (new_exp >= 31) {
+        return (sign << 15u) | 0x7C00u;
+    }
+    if (new_exp <= 0) {
+        return (sign << 15u);
+    }
+    return (sign << 15u) | (u32(new_exp) << 10u) | (mantissa >> 13u);
+}
+
+fn f16_bits_to_f32(bits: u32) -> f32 {
+    let sign = (bits >> 15u) & 1u;
+    let exp = (bits >> 10u) & 0x1Fu;
+    let mantissa = bits & 0x3FFu;
+    if (exp == 0x1Fu) {
+        return bitcast<f32>((sign << 31u) | 0x7F800000u | (mantissa << 13u));
+    }
+    if (exp == 0u) {
+        return bitcast<f32>(sign << 31u);
+    }
+    return bitcast<f32>((sign << 31u) | ((exp + 127u - 15u) << 23u) | (mantissa << 13u));
+}
+
+fn pack2x16float_sw(v: vec2<f32>) -> u32 {
+    return f32_to_f16_bits(v.x) | (f32_to_f16_bits(v.y) << 16u);
+}
+
+fn unpack2x16float_sw(packed: u32) -> vec2<f32> {
+    return vec2<f32>(
+        f16_bits_to_f32(packed & 0xFFFFu),
+        f16_bits_to_f32((packed >> 16u) & 0xFFFFu)
+    );
+}
+
 fn getGridValue(pos: vec2<f32>) -> f32 {
     let w = f32(uniforms.width);
     let h = f32(uniforms.height);
@@ -152,7 +198,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let curProgressAndHeading = unpack2x16unorm(curProgressAndHeadingPacked) * vec2<f32>(1.0, 2.0 * pi);
     var heading = curProgressAndHeading.y;
 
-    var velocity = unpack2x16float(particlesArray.data[pos_idx + 2u]);
+    var velocity = unpack2x16float_sw(particlesArray.data[pos_idx + 2u]);
 
     // Parameters
     let p_bg = pointParams[1]; // background
@@ -235,20 +281,20 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let noiseValue = noise3(vec3<f32>(positionForNoise1.x, positionForNoise1.y, 0.8 * uniforms.time));
     let moveBiasFactor = 5.0 * lerper * noiseValue;
     var moveBias = moveBiasFactor * vec2<f32>(uniforms.moveBiasActionX, uniforms.moveBiasActionY);
-    
+
     // Add bias from all active boids
     for (var i: u32 = 0u; i < uniforms.numBoids; i = i + 1u) {
         let boid = boids[i];
         let boidPos = vec2<f32>(boid.x, boid.y);
         let normalizedBoidPos = vec2<f32>(boid.x / w, boid.y / h);
-        
+
         // Calculate distance from particle to boid (similar to action point)
         var positionFromBoid = normalizedPosition - normalizedBoidPos;
         positionFromBoid.x = positionFromBoid.x * (w / h);
-        
+
         let distanceFromBoid = length(positionFromBoid) * distanceNoiseFactor;
         let boidLerper = exp(-distanceFromBoid * distanceFromBoid / max(1e-6, uniforms.actionAreaSizeSigma) / max(1e-6, uniforms.actionAreaSizeSigma));
-        
+
         // Apply boid's bias with distance-based falloff
         let boidBiasFactor = 5.0 * boidLerper * noiseValue;
         moveBias = moveBias + boidBiasFactor * vec2<f32>(boid.moveBiasX, boid.moveBiasY);
@@ -279,20 +325,20 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (uniforms.spawnParticles >= 1u) {
         shouldSpawn = true;
     }
-    
+
     // Check if spawning from any boid
     for (var i: u32 = 0u; i < uniforms.numBoids; i = i + 1u) {
         let boid = boids[i];
         let boidPos = vec2<f32>(boid.x, boid.y);
         let normalizedBoidPos = vec2<f32>(boid.x / w, boid.y / h);
-        
+
         // Calculate distance from particle to boid
         var positionFromBoid = normalizedPosition - normalizedBoidPos;
         positionFromBoid.x = positionFromBoid.x * (w / h);
-        
+
         let distanceFromBoid = length(positionFromBoid) * distanceNoiseFactor;
         let boidLerper = exp(-distanceFromBoid * distanceFromBoid / max(1e-6, uniforms.actionAreaSizeSigma) / max(1e-6, uniforms.actionAreaSizeSigma));
-        
+
         // If particle is close enough to this boid, spawn from boid
         if (boidLerper > 0.1) {
             shouldSpawn = true;
@@ -340,5 +386,5 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Store back
     particlesArray.data[pos_idx] = pack2x16unorm(nextPosUV);
     particlesArray.data[pos_idx + 1u] = pack2x16unorm(nextAandHeading);
-    particlesArray.data[pos_idx + 2u] = pack2x16float(vec2<f32>(vx, vy));
+    particlesArray.data[pos_idx + 2u] = pack2x16float_sw(vec2<f32>(vx, vy));
 }
