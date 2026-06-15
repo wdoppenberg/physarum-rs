@@ -2,6 +2,7 @@ struct Uniforms {
 	width: u32,
 	height: u32,
 	decayFactor: f32,
+	colorMode: u32,
 };
 
 @group(0) @binding(10) var<uniform> uniforms: Uniforms;
@@ -9,6 +10,7 @@ struct Uniforms {
 // Read-only texture for the previous state of the trail map.
 @group(0) @binding(0) var trailRead: texture_2d<f32>;
 @group(0) @binding(6) var trailSampler: sampler;
+
 // Write-only texture for the new state of the trail map.
 @group(0) @binding(1) var trailWrite: texture_storage_2d<r32float, write>;
 

@@ -1,21 +1,38 @@
-use bevy::prelude::{default, Commands, Res, ResMut, Sprite, Transform};
+use crate::buffers::UniformData;
+use crate::render::create_compute_pipeline_id;
+use crate::resources::config::PhysarumConfig;
+use crate::resources::render::{
+    PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler,
+    PhysarumSimulationSettings,
+};
+use crate::utils::{binding_entry, create_particles_buffer, load_parameters};
 use bevy::asset::{AssetServer, Assets, RenderAssetUsages};
-use bevy::image::Image;
-use bevy::render::render_resource::{AddressMode, BindGroupEntry, BindingResource, BindingType, BufferBinding, BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages, Extent3d, FilterMode, PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor, StorageTextureAccess, TextureDimension, TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDimension};
 use bevy::camera::Camera2d;
-use bevy::math::{Vec2, Vec3};
-use bevy::render::render_asset::RenderAssets;
-use bevy::render::texture::GpuImage;
-use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::image::Image;
 use bevy::log::info;
-use crate::simulation::constants;
-use crate::simulation::render::create_compute_pipeline_id;
-use crate::simulation::resources::main::PhysarumInputState;
-use crate::simulation::resources::render::{PhysarumBindGroups, PhysarumBuffers, PhysarumImages, PhysarumPipeline, PhysarumSampler, PhysarumSimulationSettings};
-use crate::simulation::utils::{binding_entry, create_particles_buffer, load_parameters};
+use bevy::math::{Vec2, Vec3};
+use bevy::post_process::bloom::Bloom;
+use bevy::post_process::dof::DepthOfField;
+use bevy::post_process::effect_stack::ChromaticAberration;
+use bevy::prelude::{default, Commands, Res, ResMut, Resource, Sprite, Transform};
+use bevy::render::render_asset::RenderAssets;
+use bevy::render::render_resource::{
+    encase, AddressMode, BindGroupEntry, BindGroupLayoutDescriptor, BindingResource, BindingType,
+    BufferBinding, BufferBindingType, BufferDescriptor, BufferInitDescriptor, BufferUsages,
+    Extent3d, FilterMode, PipelineCache, Sampler, SamplerBindingType, SamplerDescriptor,
+    StorageTextureAccess, TextureDimension, TextureFormat, TextureSampleType, TextureUsages,
+    TextureView, TextureViewDimension,
+};
+use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::render::texture::GpuImage;
+use bevy::render::view::Hdr;
 
-pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let (width, height) = (constants::WIDTH, constants::HEIGHT);
+pub fn render_setup(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    config: Res<PhysarumConfig>,
+) {
+    let (width, height) = (config.width, config.height);
 
     let mut display_image = Image::new_fill(
         Extent3d {
@@ -40,7 +57,7 @@ pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        &vec![0; (width * height * 2) as usize],
+        &vec![0; (width * height * 4) as usize],
         TextureFormat::R32Float,
         RenderAssetUsages::RENDER_WORLD,
     );
@@ -56,17 +73,20 @@ pub fn render_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         display_texture: display_texture.clone(), // Clone the handle for the resource
     });
 
-    commands.spawn(Camera2d);
+    commands.spawn((
+        Camera2d,
+        Hdr,
+        ChromaticAberration::default(),
+        Bloom::default(),
+        DepthOfField::default(),
+    ));
     commands.spawn((
         Sprite {
             image: display_texture.clone(),
-            custom_size: Some(Vec2::new(
-                constants::WIDTH as f32,
-                constants::HEIGHT as f32,
-            )),
+            custom_size: Some(Vec2::new(config.width as f32, config.height as f32)),
             ..default()
         },
-        Transform::from_scale(Vec3::splat(constants::DISPLAY_FACTOR as f32)),
+        Transform::from_scale(Vec3::splat(config.display_factor as f32)),
     ));
 }
 
@@ -76,7 +96,7 @@ fn create_bind_group_entries<'a>(
     display_texture_view: &'a TextureView,
     buffers: &'a PhysarumBuffers,
     sampler: &'a Sampler,
-) -> [BindGroupEntry<'a>; 8] {
+) -> [BindGroupEntry<'a>; 9] {
     [
         BindGroupEntry {
             binding: 0,
@@ -126,12 +146,21 @@ fn create_bind_group_entries<'a>(
                 size: None,
             }),
         },
+        BindGroupEntry {
+            binding: 11,
+            resource: BindingResource::Buffer(BufferBinding {
+                buffer: &buffers.boids_buffer,
+                offset: 0,
+                size: None,
+            }),
+        },
     ]
 }
 
 pub fn prepare_bind_groups(
     mut commands: Commands,
     pipeline: Res<PhysarumPipeline>,
+    pipeline_cache: Res<PipelineCache>,
     gpu_images: Res<RenderAssets<GpuImage>>,
     images: Res<PhysarumImages>,
     sampler: Res<PhysarumSampler>,
@@ -150,9 +179,12 @@ pub fn prepare_bind_groups(
         .get(&images.display_texture)
         .expect("Display texture not found");
 
+    let bind_group_layout =
+        pipeline_cache.get_bind_group_layout(&pipeline.compute_bind_group_layout);
+
     let compute_bind_group_a = render_device.create_bind_group(
         Some("Compute Bind Group A"),
-        &pipeline.compute_bind_group_layout,
+        &bind_group_layout,
         // &entries_fn(&view_a.texture_view, &view_b.texture_view)
         &create_bind_group_entries(
             &view_a.texture_view,
@@ -165,7 +197,7 @@ pub fn prepare_bind_groups(
 
     let compute_bind_group_b = render_device.create_bind_group(
         Some("Compute Bind Group B"),
-        &pipeline.compute_bind_group_layout,
+        &bind_group_layout,
         &create_bind_group_entries(
             &view_b.texture_view,
             &view_a.texture_view,
@@ -187,6 +219,7 @@ pub fn init_physarum_pipeline(
     render_queue: Res<RenderQueue>,
     mut pipeline_cache: ResMut<PipelineCache>,
     asset_server: Res<AssetServer>,
+    config: Res<PhysarumConfig>,
 ) {
     // Create a sampler for texture reads
     let sampler = render_device.create_sampler(&SamplerDescriptor {
@@ -203,7 +236,7 @@ pub fn init_physarum_pipeline(
     commands.insert_resource(PhysarumSampler(sampler));
 
     // Create the initial buffers
-    let particles_buffer = create_particles_buffer(&render_device);
+    let particles_buffer = create_particles_buffer(&render_device, config.num_particles);
 
     // Simulation parameters (start at 0)
     let index = 0;
@@ -211,37 +244,71 @@ pub fn init_physarum_pipeline(
 
     commands.insert_resource(PhysarumSimulationSettings {
         index,
-        point_settings
+        point_settings,
     });
 
+    // Provide two point settings (pen/background). For now, duplicate the same settings.
+    let params_pair = [point_settings, point_settings];
     let params_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
         label: Some("Simulation Params Buffer"),
-        contents: bytemuck::bytes_of(&point_settings),
+        contents: bytemuck::cast_slice(&params_pair),
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
     });
-
-
 
     // Create uniform buffer for simulation parameters
     let uniform_buffer = render_device.create_buffer(&BufferDescriptor {
         label: Some("Uniform Buffer"),
-        size: size_of::<[u32; 3]>() as u64, // width, height, decay/deposit factor
+        size: size_of::<UniformData>() as u64,
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
 
     // Write initial data to uniform buffer
     // Make sure all values are consistently u32 to match shader expectations
-    let uniform_data = [
-        constants::WIDTH,
-        constants::HEIGHT,
-        constants::DECAY_FACTOR.to_bits(),
-    ];
-    render_queue.write_buffer(&uniform_buffer, 0, bytemuck::cast_slice(&uniform_data));
+    let uniform_data = UniformData {
+        width: config.width,
+        height: config.height,
+        value: config.decay_factor,
+        color_mode: config.color_mode,
+        num_particles: config.num_particles,
+        time: 0.0,
+        action_area_size_sigma: 0.0,
+        action_x: 0.0,
+        action_y: 0.0,
+        move_bias_action_x: 0.0,
+        move_bias_action_y: 0.0,
+        l2_action: 0.0,
+        spawn_particles: 0,
+        spawn_fraction: 0.0,
+        random_spawn_number: 0,
+        num_boids: 0,
+        audio_level: 0.0,
+        audio_bass: 0.0,
+        audio_mid: 0.0,
+        audio_treble: 0.0,
+        audio_beat: 0.0,
+        dark_profile_enabled: u32::from(config.dark_profile_enabled),
+        dark_max_luminance: config.dark_max_luminance,
+        dark_contrast: config.dark_contrast,
+        dark_black_lift: config.dark_black_lift,
+        liveliness: 1.0,
+    };
+    let mut buffer = encase::UniformBuffer::new(Vec::new());
+    buffer.write(&uniform_data).unwrap();
+
+    render_queue.write_buffer(&uniform_buffer, 0, &buffer.into_inner());
 
     let counter_buffer = render_device.create_buffer(&BufferDescriptor {
         label: Some("Counter Buffer"),
-        size: (constants::WIDTH * constants::HEIGHT * 4) as u64, // 4 bytes per u32
+        size: (config.width * config.height * 4) as u64, // 4 bytes per u32
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    // Create boids buffer for up to 50 boids (32 bytes per BoidData: 5 f32s + 3 f32s padding)
+    let boids_buffer = render_device.create_buffer(&BufferDescriptor {
+        label: Some("Boids Buffer"),
+        size: (50 * 32) as u64, // 50 boids * 32 bytes each
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -251,6 +318,7 @@ pub fn init_physarum_pipeline(
         particles_buffer,
         uniform_buffer,
         params_buffer,
+        boids_buffer,
     });
 
     let setter_shader = asset_server.load("shaders/setter.wgsl");
@@ -259,8 +327,8 @@ pub fn init_physarum_pipeline(
     let diffusion_shader = asset_server.load("shaders/diffusion.wgsl");
 
     // Define the binding layout
-    let compute_bind_group_layout = render_device.create_bind_group_layout(
-        Some("Compute Bind Group Layout"),
+    let compute_bind_group_layout = BindGroupLayoutDescriptor::new(
+        "Compute Bind Group Layout",
         &[
             binding_entry(
                 0,
@@ -319,6 +387,14 @@ pub fn init_physarum_pipeline(
                     min_binding_size: None,
                 },
             ), // Uniforms
+            binding_entry(
+                11,
+                BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            ), // Boids
         ],
     );
 
@@ -368,19 +444,110 @@ pub fn init_physarum_pipeline(
 
 /// Update simulation parameters in the render world
 pub fn update_simulation_params(
-    mut input_state: ResMut<PhysarumInputState>,
+    mut config: ResMut<PhysarumConfig>,
     buffers: Res<PhysarumBuffers>,
     render_queue: Res<RenderQueue>,
     mut simulation_settings: ResMut<PhysarumSimulationSettings>,
 ) {
-    if input_state.settings_changed {
-        simulation_settings.index = input_state.new_index;
-        simulation_settings.point_settings = load_parameters(simulation_settings.index);
+    if config.settings_changed {
+        // Use the current settings provided by the main world UI/input state
+        simulation_settings.index = config.new_index;
+        simulation_settings.point_settings = config.current_settings;
 
-        let params_bytes = bytemuck::bytes_of(&simulation_settings.point_settings);
+        let params_pair = [
+            simulation_settings.point_settings,
+            simulation_settings.point_settings,
+        ];
+        let params_bytes = bytemuck::cast_slice(&params_pair);
         render_queue.write_buffer(&buffers.params_buffer, 0, params_bytes);
 
         // Reset the flag
-        input_state.settings_changed = false;
+        config.settings_changed = false;
+    }
+}
+
+/// Resource to track last known dimensions in render world
+#[derive(Resource, Default)]
+pub struct RenderWorldDimensions {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Recreate size-dependent buffers when window is resized
+pub fn handle_buffer_resize(
+    mut commands: Commands,
+    config: Res<PhysarumConfig>,
+    mut dimensions: ResMut<RenderWorldDimensions>,
+    buffers: Option<Res<PhysarumBuffers>>,
+    render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
+) {
+    // Check if dimensions have changed
+    if config.width == dimensions.width && config.height == dimensions.height {
+        return;
+    }
+
+    info!(
+        "Render world dimensions changed to {}x{}, recreating buffers",
+        config.width, config.height
+    );
+
+    // Update tracked dimensions
+    dimensions.width = config.width;
+    dimensions.height = config.height;
+
+    if let Some(buffers) = buffers {
+        // Create new counter buffer with new dimensions
+        let counter_buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("Counter Buffer"),
+            size: (config.width * config.height * 4) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Update uniform buffer with new dimensions
+        let uniform_data = UniformData {
+            width: config.width,
+            height: config.height,
+            value: config.decay_factor,
+            color_mode: config.color_mode,
+            num_particles: config.num_particles,
+            time: 0.0,
+            action_area_size_sigma: 0.0,
+            action_x: 0.0,
+            action_y: 0.0,
+            move_bias_action_x: 0.0,
+            move_bias_action_y: 0.0,
+            l2_action: 0.0,
+            spawn_particles: 0,
+            spawn_fraction: 0.0,
+            random_spawn_number: 0,
+            num_boids: 0,
+            audio_level: 0.0,
+            audio_bass: 0.0,
+            audio_mid: 0.0,
+            audio_treble: 0.0,
+            audio_beat: 0.0,
+            dark_profile_enabled: u32::from(config.dark_profile_enabled),
+            dark_max_luminance: config.dark_max_luminance,
+            dark_contrast: config.dark_contrast,
+            dark_black_lift: config.dark_black_lift,
+            liveliness: 1.0,
+        };
+        let mut buffer = encase::UniformBuffer::new(Vec::new());
+        buffer.write(&uniform_data).unwrap();
+        render_queue.write_buffer(&buffers.uniform_buffer, 0, &buffer.into_inner());
+
+        // Create new PhysarumBuffers resource with new counter buffer
+        commands.insert_resource(PhysarumBuffers {
+            counter_buffer,
+            particles_buffer: buffers.particles_buffer.clone(),
+            uniform_buffer: buffers.uniform_buffer.clone(),
+            params_buffer: buffers.params_buffer.clone(),
+            boids_buffer: buffers.boids_buffer.clone(),
+        });
+
+        // Force bind groups to be recreated by removing the resource
+        commands.remove_resource::<PhysarumBindGroups>();
     }
 }

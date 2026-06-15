@@ -1,13 +1,15 @@
-use bevy::prelude::Resource;
-use bevy::render::render_resource::{BindGroup, BindGroupLayout, Buffer, CachedComputePipelineId, Sampler};
-use bevy::render::extract_resource::ExtractResource;
 use bevy::asset::Handle;
 use bevy::image::Image;
+use bevy::prelude::Resource;
+use bevy::render::extract_resource::ExtractResource;
+use bevy::render::render_resource::{
+    BindGroup, BindGroupLayoutDescriptor, Buffer, CachedComputePipelineId, Sampler,
+};
 
 /// Settings for the simulation points
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
-pub struct PointSettings {
+pub struct SimulationSettings {
     pub default_scaling_factor: f32,
     pub sensor_distance0: f32,
     pub sd_exponent: f32,
@@ -34,18 +36,19 @@ pub struct PhysarumBuffers {
     pub(crate) counter_buffer: Buffer,
     pub(crate) particles_buffer: Buffer,
     pub(crate) params_buffer: Buffer,
+    pub(crate) boids_buffer: Buffer,
 }
 
 #[derive(Resource, Clone, ExtractResource)]
 pub struct PhysarumImages {
     pub(crate) texture_a: Handle<Image>,
     pub(crate) texture_b: Handle<Image>,
-    pub(crate) display_texture: Handle<Image>
+    pub(crate) display_texture: Handle<Image>,
 }
 
 #[derive(Resource)]
 pub struct PhysarumPipeline {
-    pub(crate) compute_bind_group_layout: BindGroupLayout,
+    pub(crate) compute_bind_group_layout: BindGroupLayoutDescriptor,
     pub setter_pipeline_id: CachedComputePipelineId,
     pub move_pipeline_id: CachedComputePipelineId,
     pub deposit_pipeline_id: CachedComputePipelineId,
@@ -58,5 +61,5 @@ pub struct PhysarumBindGroups(pub [BindGroup; 2]);
 #[derive(Resource)]
 pub struct PhysarumSimulationSettings {
     pub(crate) index: usize,
-    pub(crate) point_settings: PointSettings
+    pub(crate) point_settings: SimulationSettings,
 }

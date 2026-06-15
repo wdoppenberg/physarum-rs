@@ -1,17 +1,16 @@
+use crate::constants::PARAMETERS_MATRIX;
+use crate::resources::render::SimulationSettings;
 use bevy::prelude::*;
 use bevy::render::render_resource::*;
 use bevy::render::renderer::RenderDevice;
 use rand::Rng;
-
-use crate::simulation::constants;
-use crate::simulation::constants::{NUMBER_OF_BASE_POINTS, PARAMETERS_MATRIX};
-use crate::simulation::resources::render::PointSettings;
 /// Create a buffer containing the initial particle positions
-pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
+pub fn create_particles_buffer(render_device: &RenderDevice, num_particles: u32) -> Buffer {
+    let start = std::time::Instant::now();
     let mut rng = rand::rng();
-    let mut initial_particle_data = Vec::with_capacity(2 * constants::NUM_PARTICLES as usize);
+    let mut initial_particle_data = Vec::with_capacity(3 * num_particles as usize);
 
-    for _ in 0..constants::NUM_PARTICLES {
+    for _ in 0..num_particles {
         // Position (packed as 2x16 unorm)
         let x = rng.random::<f32>();
         let y = rng.random::<f32>();
@@ -24,21 +23,27 @@ pub fn create_particles_buffer(render_device: &RenderDevice) -> Buffer {
         let heading_normalized = heading / (2.0 * std::f32::consts::PI); // Normalize to 0-1
         let progress_heading_packed = pack_2x16_unorm(progress, heading_normalized);
         initial_particle_data.push(progress_heading_packed);
+
+        // Velocity (packed as 2x16 float halves) - initialize to 0
+        // Represented as f16 in both components; we just push 0u32 here
+        initial_particle_data.push(0u32);
     }
 
-    render_device.create_buffer_with_data(&BufferInitDescriptor {
+    let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
         label: Some("Particle Buffer"),
         contents: bytemuck::cast_slice(&initial_particle_data),
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-    })
+    });
+    println!("create_particles_buffer took {:?}", start.elapsed());
+    buffer
 }
 
 /// Load parameters from the parameters matrix
-pub fn load_parameters(index: usize) -> PointSettings {
-    let index = index % NUMBER_OF_BASE_POINTS;
+pub fn load_parameters(index: usize) -> SimulationSettings {
+    let index = index % PARAMETERS_MATRIX.len();
     let params = PARAMETERS_MATRIX[index];
-    
-    PointSettings {
+
+    SimulationSettings {
         default_scaling_factor: 1.0,
         sensor_distance0: params[0],
         sd_exponent: params[1],
