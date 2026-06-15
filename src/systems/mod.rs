@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod boids;
 pub mod input;
 pub mod post_process;

@@ -1,3 +1,4 @@
+use crate::resources::audio::AudioAnalysisState;
 use crate::resources::config::PhysarumConfig;
 use crate::resources::ui::UiState;
 use crate::utils::load_parameters;
@@ -6,7 +7,7 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
 /// Color mode names matching the shader implementations
-const COLOR_MODES: [(&str, u32); 12] = [
+const COLOR_MODES: [(&str, u32); 13] = [
     ("Rainbow HSV", 0),
     ("Psychedelic Fire", 1),
     ("Electric Ice", 2),
@@ -19,6 +20,7 @@ const COLOR_MODES: [(&str, u32); 12] = [
     ("Bioluminescent Green", 9),
     ("Rainbow Waves", 10),
     ("Teal Sunset", 11),
+    ("Noir Pulse (Dark)", 12),
 ];
 
 /// Simulation mode names from PARAMETERS_MATRIX
@@ -54,6 +56,7 @@ pub fn sidebar_ui(
     mut contexts: EguiContexts,
     mut ui_state: ResMut<UiState>,
     mut config: ResMut<PhysarumConfig>,
+    audio_state: Res<AudioAnalysisState>,
     diagnostics: Res<DiagnosticsStore>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
 ) {
@@ -155,6 +158,66 @@ pub fn sidebar_ui(
                         }
                     }
                 });
+
+            ui.separator();
+            ui.heading("Audio Reactive");
+            ui.separator();
+            ui.checkbox(
+                &mut config.audio_reactive_enabled,
+                "Enable audio-reactive modulation",
+            );
+            ui.horizontal(|ui| {
+                ui.label("Input");
+                ui.selectable_value(&mut config.audio_input_mode, 0, "Microphone");
+                ui.selectable_value(&mut config.audio_input_mode, 1, "Synthetic");
+            });
+            ui.add(
+                egui::Slider::new(&mut config.audio_reactive_gain, 0.0..=2.0).text("Reactive gain"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.audio_bass_influence, 0.0..=2.5)
+                    .text("Bass influence"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.audio_mid_influence, 0.0..=2.5).text("Mid influence"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.audio_treble_influence, 0.0..=2.5)
+                    .text("Treble influence"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.audio_beat_influence, 0.0..=2.5)
+                    .text("Beat influence"),
+            );
+            ui.add(
+                egui::Slider::new(&mut config.liveliness_boost, 0.0..=2.0).text("Liveliness boost"),
+            );
+            ui.label(format!(
+                "Mic: {} | Level {:.2} Bass {:.2} Mid {:.2} Treble {:.2} Beat {:.2}",
+                if audio_state.mic_available {
+                    "available"
+                } else {
+                    "not available"
+                },
+                audio_state.level,
+                audio_state.bass,
+                audio_state.mid,
+                audio_state.treble,
+                audio_state.beat
+            ));
+
+            ui.separator();
+            ui.heading("Projection Dark Profile");
+            ui.separator();
+            ui.checkbox(
+                &mut config.dark_profile_enabled,
+                "Enable dark projection grading",
+            );
+            ui.add(
+                egui::Slider::new(&mut config.dark_max_luminance, 0.1..=1.0).text("Max luminance"),
+            );
+            ui.add(egui::Slider::new(&mut config.dark_contrast, 0.6..=2.5).text("Contrast"));
+            ui.add(egui::Slider::new(&mut config.dark_black_lift, 0.0..=0.12).text("Black lift"));
 
             ui.separator();
             ui.label("Post-processing");

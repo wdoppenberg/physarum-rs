@@ -17,7 +17,7 @@ pub fn handle_window_resize(
 ) {
     // Process only the last resize event to avoid redundant work
     let last_event = resize_events.read().last();
-    
+
     if let Some(event) = last_event {
         let new_width = event.width as u32;
         let new_height = event.height as u32;

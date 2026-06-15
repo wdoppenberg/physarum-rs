@@ -14,6 +14,12 @@ pub struct PhysarumInputState {
     pub spawn_particles: u32,
     pub spawn_fraction: f32,
     pub random_spawn_number: u32,
+    pub num_boids: u32,
+    pub audio_level: f32,
+    pub audio_bass: f32,
+    pub audio_mid: f32,
+    pub audio_treble: f32,
+    pub audio_beat: f32,
 }
 
 impl Default for PhysarumInputState {
@@ -28,6 +34,12 @@ impl Default for PhysarumInputState {
             spawn_particles: 0,
             spawn_fraction: 0.15,
             random_spawn_number: 0,
+            num_boids: 0,
+            audio_level: 0.0,
+            audio_bass: 0.0,
+            audio_mid: 0.0,
+            audio_treble: 0.0,
+            audio_beat: 0.0,
         }
     }
 }

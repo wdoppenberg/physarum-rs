@@ -3,6 +3,28 @@ struct Uniforms {
 	height: u32,
 	depositFactor: f32,
 	colorMode: u32,
+	numParticles: u32,
+	time: f32,
+	actionAreaSizeSigma: f32,
+	actionX: f32,
+	actionY: f32,
+	moveBiasActionX: f32,
+	moveBiasActionY: f32,
+	L2Action: f32,
+	spawnParticles: u32,
+	spawnFraction: f32,
+	randomSpawnNumber: u32,
+	numBoids: u32,
+	audioLevel: f32,
+	audioBass: f32,
+	audioMid: f32,
+	audioTreble: f32,
+	audioBeat: f32,
+	darkProfileEnabled: u32,
+	darkMaxLuminance: f32,
+	darkContrast: f32,
+	darkBlackLift: f32,
+	liveliness: f32,
 };
 @group(0) @binding(10) var<uniform> uniforms: Uniforms;
 
@@ -338,6 +360,17 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 			col = mix(col1, col3, blend * 0.7 + grad * 0.2);
 			col = clamp(1.5 * pow(col, vec3<f32>(0.9)), vec3<f32>(0.0), vec3<f32>(1.0));
 		}
+		case 12u: { // Dark projection palette with restrained highlights
+			let t = tanh(clampedCountColor * (1.3 + 0.3 * uniforms.audioBass) + offset * 0.25);
+			let deepBlue = vec3<f32>(0.01, 0.05, 0.12);
+			let coldTeal = vec3<f32>(0.03, 0.25, 0.32);
+			let ember = vec3<f32>(0.65, 0.34, 0.16);
+			let peak = vec3<f32>(0.96, 0.74, 0.35);
+			let base = mix(deepBlue, coldTeal, smoothstep(0.0, 0.55, t));
+			let hot = mix(ember, peak, smoothstep(0.35, 1.0, t + blend * 0.2));
+			col = mix(base, hot, smoothstep(0.2, 1.0, grad + t * 0.7));
+			col *= 0.45 + 0.25 * uniforms.audioLevel + 0.20 * uniforms.audioBeat;
+		}
 		case 10000u: { // Dynamic cyan-magenta split
 			let cyan = vec3<f32>(0.0, 1.0, 1.0) * clampedCountColor * 1.3;
 			let magenta = vec3<f32>(1.0, 0.0, 1.0) * grad * 1.5;
@@ -349,6 +382,18 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 			let hsv = vec3<f32>(hue, 0.8, clampedCountColor);
 			col = hsv2rgb(hsv);
 		}
+	}
+
+	// React to the incoming audio signal before final grading.
+	let reactiveBoost = 0.75 + 0.35 * uniforms.audioLevel + 0.25 * uniforms.audioBeat;
+	col *= reactiveBoost * clamp(uniforms.liveliness, 0.7, 3.0);
+
+	// Projection-safe grading path to keep rooms dark while preserving contrast.
+	if (uniforms.darkProfileEnabled == 1u) {
+		let black = vec3<f32>(uniforms.darkBlackLift);
+		col = max(col, black);
+		col = (col - black) * uniforms.darkContrast + black;
+		col = min(col, vec3<f32>(uniforms.darkMaxLuminance));
 	}
 
 	col = clamp(col, vec3<f32>(0.0), vec3<f32>(1.0));

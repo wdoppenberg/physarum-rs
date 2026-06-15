@@ -18,12 +18,12 @@ pub(crate) enum Behaviour {
         /// Perturbation factor
         p: f32,
         /// Bias
-        bias: Vec2
+        bias: Vec2,
     },
     Target {
-        pos: Vec2
+        pos: Vec2,
     },
-    Flock
+    Flock,
 }
 
 /// Interaction with physarum field
@@ -31,9 +31,7 @@ pub(crate) enum Behaviour {
 pub(crate) enum Interaction {
     Attract,
     Repel,
-    Channel {
-        dir: Vec2
-    }
+    Channel { dir: Vec2 },
 }
 
 #[derive(Bundle)]
@@ -43,7 +41,7 @@ pub(crate) struct BoidBundle {
     size: Size,
     mass: Mass,
     behaviour: Behaviour,
-    interaction: Interaction
+    interaction: Interaction,
 }
 
 impl Default for BoidBundle {
@@ -53,8 +51,11 @@ impl Default for BoidBundle {
             velocity: Velocity(Vec2::ZERO),
             size: Size(1.0),
             mass: Mass(1.0),
-            behaviour: Behaviour::Random { p: 0.01, bias: Vec2::ZERO },
-            interaction: Interaction::Attract
+            behaviour: Behaviour::Random {
+                p: 0.01,
+                bias: Vec2::ZERO,
+            },
+            interaction: Interaction::Attract,
         }
     }
 }

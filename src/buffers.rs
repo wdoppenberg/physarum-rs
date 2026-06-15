@@ -23,6 +23,17 @@ pub(crate) struct UniformData {
     pub(crate) spawn_particles: u32,
     pub(crate) spawn_fraction: f32,
     pub(crate) random_spawn_number: u32,
+    pub(crate) num_boids: u32,
+    pub(crate) audio_level: f32,
+    pub(crate) audio_bass: f32,
+    pub(crate) audio_mid: f32,
+    pub(crate) audio_treble: f32,
+    pub(crate) audio_beat: f32,
+    pub(crate) dark_profile_enabled: u32,
+    pub(crate) dark_max_luminance: f32,
+    pub(crate) dark_contrast: f32,
+    pub(crate) dark_black_lift: f32,
+    pub(crate) liveliness: f32,
 }
 
 /// Single boid data structure for GPU storage

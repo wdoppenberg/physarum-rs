@@ -18,6 +18,18 @@ pub struct PhysarumConfig {
     pub color_mode: u32,
     pub action_area_size_sigma: f32,
     pub post_process_config: PostProcessConfig,
+    pub liveliness_boost: f32,
+    pub audio_reactive_enabled: bool,
+    pub audio_input_mode: u32, // 0: microphone, 1: synthetic pulse
+    pub audio_reactive_gain: f32,
+    pub audio_bass_influence: f32,
+    pub audio_mid_influence: f32,
+    pub audio_treble_influence: f32,
+    pub audio_beat_influence: f32,
+    pub dark_profile_enabled: bool,
+    pub dark_max_luminance: f32,
+    pub dark_contrast: f32,
+    pub dark_black_lift: f32,
 
     // Parameter selection/state (better placed in UI panel)
     pub settings_changed: bool,
@@ -41,9 +53,21 @@ impl Default for PhysarumConfig {
             decay_factor: 0.99,
             pixel_scale_factor: 1.0,
             deposit_factor: 1.0,
-            color_mode: 0,
+            color_mode: 12,
             action_area_size_sigma: 0.5,
             post_process_config: PostProcessConfig::default(),
+            liveliness_boost: 0.65,
+            audio_reactive_enabled: true,
+            audio_input_mode: 0,
+            audio_reactive_gain: 1.0,
+            audio_bass_influence: 1.2,
+            audio_mid_influence: 0.8,
+            audio_treble_influence: 0.6,
+            audio_beat_influence: 1.0,
+            dark_profile_enabled: true,
+            dark_max_luminance: 0.38,
+            dark_contrast: 1.35,
+            dark_black_lift: 0.01,
             settings_changed: false,
             new_index,
             current_settings,
@@ -58,13 +82,33 @@ pub struct ChromaticAberrationConfig {
 
 impl Default for ChromaticAberrationConfig {
     fn default() -> Self {
-        Self { intensity: 0.01 }
+        Self { intensity: 0.004 }
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct PostProcessConfig {
     pub bloom: Bloom,
     pub chromatic_aberration: ChromaticAberrationConfig,
     pub depth_of_field: DepthOfField,
+}
+
+impl Default for PostProcessConfig {
+    fn default() -> Self {
+        let bloom = Bloom {
+            intensity: 0.04,
+            ..Default::default()
+        };
+        let depth_of_field = DepthOfField {
+            focal_distance: 35.0,
+            max_depth: 70.0,
+            ..Default::default()
+        };
+
+        Self {
+            bloom,
+            chromatic_aberration: ChromaticAberrationConfig::default(),
+            depth_of_field,
+        }
+    }
 }

@@ -14,7 +14,7 @@ use bevy::math::{Vec2, Vec3};
 use bevy::post_process::bloom::Bloom;
 use bevy::post_process::dof::DepthOfField;
 use bevy::post_process::effect_stack::ChromaticAberration;
-use bevy::prelude::{default, Commands, Query, Res, ResMut, Resource, Sprite, Transform};
+use bevy::prelude::{default, Commands, Res, ResMut, Resource, Sprite, Transform};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_resource::{
     encase, AddressMode, BindGroupEntry, BindGroupLayoutDescriptor, BindingResource, BindingType,
@@ -179,7 +179,8 @@ pub fn prepare_bind_groups(
         .get(&images.display_texture)
         .expect("Display texture not found");
 
-    let bind_group_layout = pipeline_cache.get_bind_group_layout(&pipeline.compute_bind_group_layout);
+    let bind_group_layout =
+        pipeline_cache.get_bind_group_layout(&pipeline.compute_bind_group_layout);
 
     let compute_bind_group_a = render_device.create_bind_group(
         Some("Compute Bind Group A"),
@@ -280,6 +281,17 @@ pub fn init_physarum_pipeline(
         spawn_particles: 0,
         spawn_fraction: 0.0,
         random_spawn_number: 0,
+        num_boids: 0,
+        audio_level: 0.0,
+        audio_bass: 0.0,
+        audio_mid: 0.0,
+        audio_treble: 0.0,
+        audio_beat: 0.0,
+        dark_profile_enabled: u32::from(config.dark_profile_enabled),
+        dark_max_luminance: config.dark_max_luminance,
+        dark_contrast: config.dark_contrast,
+        dark_black_lift: config.dark_black_lift,
+        liveliness: 1.0,
     };
     let mut buffer = encase::UniformBuffer::new(Vec::new());
     buffer.write(&uniform_data).unwrap();
@@ -510,6 +522,17 @@ pub fn handle_buffer_resize(
             spawn_particles: 0,
             spawn_fraction: 0.0,
             random_spawn_number: 0,
+            num_boids: 0,
+            audio_level: 0.0,
+            audio_bass: 0.0,
+            audio_mid: 0.0,
+            audio_treble: 0.0,
+            audio_beat: 0.0,
+            dark_profile_enabled: u32::from(config.dark_profile_enabled),
+            dark_max_luminance: config.dark_max_luminance,
+            dark_contrast: config.dark_contrast,
+            dark_black_lift: config.dark_black_lift,
+            liveliness: 1.0,
         };
         let mut buffer = encase::UniformBuffer::new(Vec::new());
         buffer.write(&uniform_data).unwrap();

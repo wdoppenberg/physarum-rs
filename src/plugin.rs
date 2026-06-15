@@ -1,8 +1,10 @@
 use crate::render::{PhysarumSimulationLabel, PhysarumSimulationNode};
+use crate::resources::audio::{AudioAnalysisState, AudioCaptureStatus};
 use crate::resources::config::PhysarumConfig;
 use crate::resources::input::PhysarumInputState;
 use crate::resources::render::PhysarumImages;
 use crate::resources::ui::UiState;
+use crate::systems::audio::{setup_audio_capture, update_audio_reactivity};
 use crate::systems::input::handle_input;
 use crate::systems::post_process::update_post_process_settings;
 use crate::systems::render::{
@@ -11,11 +13,11 @@ use crate::systems::render::{
 };
 use crate::systems::resize::handle_window_resize;
 use crate::systems::ui::sidebar_ui;
-use bevy::app::{App, Plugin, Update};
+use bevy::app::{App, Plugin, Startup, Update};
 use bevy::prelude::{resource_changed, IntoScheduleConfigs, Mut};
 use bevy::render::extract_resource::ExtractResourcePlugin;
 use bevy::render::render_graph::RenderGraph;
-use bevy::render::{ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems};
+use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
 use bevy_egui::EguiPrimaryContextPass;
 
 /// Plugin for the Physarum simulation
@@ -31,6 +33,8 @@ impl Plugin for PhysarumPlugin {
 
         // Initialize the input state resource
         app.init_resource::<PhysarumInputState>();
+        app.init_resource::<AudioAnalysisState>();
+        app.init_resource::<AudioCaptureStatus>();
 
         // Initialize the UI state resource
         app.init_resource::<UiState>();
@@ -58,14 +62,16 @@ impl Plugin for PhysarumPlugin {
             bevy::render::graph::CameraDriverLabel,
         );
 
-        app.add_systems(
-            Update,
-            (
-                handle_window_resize,
-                handle_input,
-                update_post_process_settings.run_if(resource_changed::<PhysarumConfig>),
-            ),
-        )
-        .add_systems(EguiPrimaryContextPass, sidebar_ui);
+        app.add_systems(Startup, setup_audio_capture)
+            .add_systems(
+                Update,
+                (
+                    handle_window_resize,
+                    handle_input,
+                    update_audio_reactivity,
+                    update_post_process_settings.run_if(resource_changed::<PhysarumConfig>),
+                ),
+            )
+            .add_systems(EguiPrimaryContextPass, sidebar_ui);
     }
 }

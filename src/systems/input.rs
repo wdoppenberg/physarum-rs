@@ -93,6 +93,6 @@ pub fn handle_input(
 
     // Cycle color modes with P
     if keys.just_pressed(KeyCode::KeyP) {
-        config.color_mode = (config.color_mode + 1) % 10; // cycle through first 10 modes
+        config.color_mode = (config.color_mode + 1) % 13;
     }
 }
